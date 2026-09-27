@@ -2,7 +2,8 @@
 import SwiftUI
 import UIKit
 
-/// Launch arguments for the iPad simulator smoke test in CI (ci/sim_screens.sh). Debug builds only:
+/// Launch arguments for the iPad simulator smoke test in CI (ci/sim_screens.sh) and browser demo.
+/// Debug builds only:
 /// the release and test builds that go onto the iPad never contain this file's code.
 ///   -DDUImportInbox 1          import every .ecopack waiting in Documents, without the preview
 ///   -DDUTab <name>             today / library / shadow / ielts / vocab / progress / settings
@@ -19,6 +20,13 @@ enum DebugHooks {
     static func run(packs: PackStore, router: Router) async {
         if let o = value("DDUOrientation") {
             rotate(o)
+        }
+        // The browser simulator starts with fresh app data. Seed its bundled, original demo
+        // content on first launch so the reader and library can be tested without file sharing.
+        if value("DDUImportInbox") != "1", packs.packs.isEmpty,
+           let demo = Bundle.main.url(forResource: "demo", withExtension: "ecopack") {
+            let message = await packs.importPack(from: demo)
+            DiagLog.shared.log("debug", "bundled demo: \(message)")
         }
         if value("DDUImportInbox") == "1" {
             let fm = FileManager.default

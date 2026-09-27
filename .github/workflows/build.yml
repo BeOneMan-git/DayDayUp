@@ -184,14 +184,36 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath simbuild \
             CODE_SIGNING_ALLOWED=NO \
+            PRODUCT_BUNDLE_IDENTIFIER=com.daydayup.app.test \
+            APP_DISPLAY_NAME="DDU测试" \
             build 2>&1 | tee sim-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" sim-build.log
 
-      - name: Make the demo content pack
+      - name: Make the original demo content pack
         run: |
           set -o pipefail
           python3 --version
           python3 ci/demo_pack.py demo.ecopack 2>&1 | tee demo-pack.log
+          cp demo.ecopack simbuild/Build/Products/Debug-iphonesimulator/DayDayUp.app/demo.ecopack
+
+      - name: Package the iPad simulator app for browser testing
+        run: |
+          APP=simbuild/Build/Products/Debug-iphonesimulator/DayDayUp.app
+          test -d "$APP"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          test "$BUNDLE_ID" = com.daydayup.app.test
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
+          lipo -verify_arch arm64 "$APP/$EXECUTABLE"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" DayDayUp-Test-Simulator.zip
+          ls -lh DayDayUp-Test-Simulator.zip
+
+      - name: Attach the simulator app to the test pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-build-${{ github.run_number }}
+          files: DayDayUp-Test-Simulator.zip
+          prerelease: true
+          make_latest: false
 
       - name: Run on iPad simulators and take screenshots
         run: bash ci/sim_screens.sh simbuild/Build/Products/Debug-iphonesimulator/DayDayUp.app demo.ecopack shots
