@@ -292,10 +292,10 @@ struct FSRSScheduler: Sendable {
     }
 
     private func nextForgetStability(difficulty: Double, stability: Double, retrievability: Double) -> Double {
-        let longTerm = parameters[11]
-            * pow(difficulty, -parameters[12])
-            * (pow(stability + 1, parameters[13]) - 1)
-            * exp((1 - retrievability) * parameters[14])
+        let a = parameters[11] * pow(difficulty, -parameters[12])
+        let b = pow(stability + 1, parameters[13]) - 1
+        let c = exp((1 - retrievability) * parameters[14])
+        let longTerm = a * b * c
         let shortTerm = stability / exp(parameters[17] * parameters[18])
         return min(longTerm, shortTerm)
     }
@@ -304,12 +304,8 @@ struct FSRSScheduler: Sendable {
                                      rating: FSRSRating) -> Double {
         let hardPenalty = rating == .hard ? parameters[15] : 1
         let easyBonus = rating == .easy ? parameters[16] : 1
-        return stability * (1
-            + exp(parameters[8])
-            * (11 - difficulty)
-            * pow(stability, -parameters[9])
-            * (exp((1 - retrievability) * parameters[10]) - 1)
-            * hardPenalty
-            * easyBonus)
+        let growth = exp(parameters[8]) * (11 - difficulty) * pow(stability, -parameters[9]) *
+            (exp((1 - retrievability) * parameters[10]) - 1) * hardPenalty * easyBonus
+        return stability * (1 + growth)
     }
 }

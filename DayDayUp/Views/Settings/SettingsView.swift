@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Environment(PackStore.self) private var packs
     @Environment(UserStore.self) private var user
     @Environment(PracticeStore.self) private var practice
+    @Environment(VocabStore.self) private var vocab
     @Environment(ReadingSession.self) private var session
 
     private enum ImportMode { case packs, backup }
@@ -201,8 +202,9 @@ struct SettingsView: View {
     private func makeBackup() {
         practice.saveNow()
         user.saveNow()
+        vocab.saveNow()
         do {
-            let data = try BackupArchive.make(user: user, practice: practice)
+            let data = try BackupArchive.make(user: user, practice: practice, extraFiles: try vocab.backupFiles())
             backupDoc = BackupDocument(data: data)
             showExporter = true
             DiagLog.shared.log("backup", "built \(data.count) bytes")
@@ -216,6 +218,9 @@ struct SettingsView: View {
         do {
             if let restoredPractice = contents.practice {
                 try practice.restore(restoredPractice, recordings: contents.recordings)
+            }
+            if let restoredVocab = contents.vocab {
+                try vocab.restore(restoredVocab, events: contents.vocabEvents)
             }
             user.restore(contents.user)
             session.refreshMarks()

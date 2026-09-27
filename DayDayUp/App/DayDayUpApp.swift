@@ -5,6 +5,7 @@ struct DayDayUpApp: App {
     @State private var packs: PackStore
     @State private var user: UserStore
     @State private var practice: PracticeStore
+    @State private var vocab: VocabStore
     @State private var engine: PlaybackEngine
     @State private var session: ReadingSession
     @State private var recorder: RecorderService
@@ -16,12 +17,17 @@ struct DayDayUpApp: App {
         let user = UserStore()
         let engine = PlaybackEngine()
         let recorder = RecorderService()
+        let vocab = VocabStore()
         engine.blocksPlayback = { [weak recorder] in recorder?.isRecording ?? false }
+        packs.onArticlesChanged = { [weak vocab] diffs in vocab?.applyDiffs(diffs) }
+        let session = ReadingSession(engine: engine, packs: packs, user: user)
+        session.vocabKeys = { [weak vocab] in vocab?.savedKeys ?? [] }
         _packs = State(initialValue: packs)
         _user = State(initialValue: user)
         _practice = State(initialValue: PracticeStore())
+        _vocab = State(initialValue: vocab)
         _engine = State(initialValue: engine)
-        _session = State(initialValue: ReadingSession(engine: engine, packs: packs, user: user))
+        _session = State(initialValue: session)
         _recorder = State(initialValue: recorder)
         _router = State(initialValue: Router())
         DiagLog.shared.log("app", "launch \(BackupArchive.appVersionText()) packs=\(packs.packs.count)")
@@ -33,6 +39,7 @@ struct DayDayUpApp: App {
                 .environment(packs)
                 .environment(user)
                 .environment(practice)
+                .environment(vocab)
                 .environment(engine)
                 .environment(session)
                 .environment(recorder)
@@ -58,8 +65,10 @@ struct DayDayUpApp: App {
                 session.flushProgress()
                 user.saveNow()
                 practice.saveNow()
+                vocab.saveNow()
             case .active:
                 recorder.refreshPermission()
+                vocab.noteDayStart()
                 Task { await packs.scanInbox() }
             @unknown default:
                 break

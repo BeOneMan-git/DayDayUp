@@ -37,7 +37,7 @@ struct JSONLines<T: Codable> {
                 throw CocoaError(.fileWriteUnknown)
             }
         }
-        let handle = try FileHandle(forWritingTo: url)
+        let handle = try FileHandle(forUpdating: url)     // read + write: we look at the last byte
         defer { try? handle.close() }
         let end = try handle.seekToEnd()
         // A file that does not end with a newline had a partial last line: start on a fresh line.

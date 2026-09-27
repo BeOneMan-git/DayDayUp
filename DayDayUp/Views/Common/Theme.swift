@@ -30,6 +30,7 @@ enum Theme {
     static let currentWord = Color.adaptive(0xFFD978, 0x7A5A14)
     static let selectedWord = Color.adaptive(0xD9EBFF, 0x1F3A57)
     static let starred = Color.adaptive(0xFFE3C4, 0x4A3320)
+    static let chunkSelection = Color.adaptive(0xCFF3EC, 0x1D423C)
     static let accent = Color.adaptive(0x1F5F8B, 0x6FB0E0)
     static let chip = Color.adaptive(0xF0ECE4, 0x23272D)
     static let paper = Color.adaptive(0xFFFDF8, 0x191C20)

@@ -73,6 +73,12 @@ final class ReadingSession {
     private(set) var scrollTarget: Int?        // paragraph index to reveal
     private(set) var scrollRequestID = 0
 
+    // Chunk selection (READ-F04): tap the first word, then the last word, inside one sentence.
+    private(set) var chunkMode = false
+    private(set) var chunkAnchor: Int?
+    private(set) var chunkRange: ClosedRange<Int>?
+    var chunkReady = false                     // a range is picked; the save sheet is open
+
     // Indexes, rebuilt when an article opens (not observed)
     @ObservationIgnored private(set) var toks: [Int: TokInfo] = [:]
     @ObservationIgnored private(set) var sents: [Int: Sent] = [:]
@@ -88,6 +94,8 @@ final class ReadingSession {
     @ObservationIgnored private var stepTarget: Double?
     @ObservationIgnored private var isLoopSeeking = false
     @ObservationIgnored private var loopResume: Task<Void, Never>?
+    /// Keys of words saved in the vocabulary (VocabStore); set by the app.
+    @ObservationIgnored var vocabKeys: () -> Set<String> = { [] }
 
     // Listening progress, flushed to UserStore every 15 s
     @ObservationIgnored private var pendingSeconds: Double = 0
@@ -131,6 +139,7 @@ final class ReadingSession {
             stepTarget = nil
             selectedTok = nil
             sentenceInPanel = nil
+            cancelChunkSelection()
             if let url = packs.audioURL(newRef) {
                 engine.load(url: url, title: art.title, album: "The Economist · \(art.issue)",
                             duration: art.dur, startAt: user.state.positions[newRef.key] ?? 0)
@@ -195,7 +204,7 @@ final class ReadingSession {
         }
         bands = levels
         known = Set(user.state.known.keys)
-        starred = Set(user.state.star.keys)
+        starred = Set(user.state.star.keys).union(vocabKeys())
         marksVersion += 1
     }
 
@@ -439,6 +448,10 @@ final class ReadingSession {
 
     func tapToken(_ i: Int) {
         guard let info = toks[i] else { return }
+        if chunkMode {
+            pickChunkToken(i, sid: info.sid)
+            return
+        }
         if user.settings.pauseOnTap && engine.isPlaying {
             engine.pause()
             flushProgress()
@@ -504,10 +517,43 @@ final class ReadingSession {
         showToast(user.isKnown(key) ? "已标为认识：正文不再标注" : "已取消认识")
     }
 
-    private func refreshUserMarks() {
+    func refreshUserMarks() {
         known = Set(user.state.known.keys)
-        starred = Set(user.state.star.keys)
+        starred = Set(user.state.star.keys).union(vocabKeys())
         marksVersion += 1
+    }
+
+    /// Saved in the vocabulary (or in the old 生词本).
+    func isSaved(_ key: String) -> Bool { starred.contains(key) }
+
+    // MARK: Chunk selection
+
+    var chunkSentence: Int? { chunkAnchor.flatMap { toks[$0]?.sid } }
+
+    func startChunkSelection(from token: Int? = nil) {
+        chunkMode = true
+        chunkReady = false
+        chunkAnchor = token
+        chunkRange = token.map { $0...$0 }
+        showToast(token == nil ? "自选词群：先点第一个词，再点最后一个词" : "再点这个词群的最后一个词")
+    }
+
+    func cancelChunkSelection() {
+        chunkMode = false
+        chunkReady = false
+        chunkAnchor = nil
+        chunkRange = nil
+    }
+
+    private func pickChunkToken(_ i: Int, sid: Int) {
+        if let a = chunkAnchor, let first = toks[a], first.sid == sid {
+            chunkRange = min(a, i)...max(a, i)
+            chunkReady = true
+        } else {
+            if chunkAnchor != nil { showToast("词群要在同一句里，已从这个词重新开始") }
+            chunkAnchor = i
+            chunkRange = i...i
+        }
     }
 
     /// IELTS 5+ words of the open article, in reading order, one row per word.

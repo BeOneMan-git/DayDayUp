@@ -61,7 +61,20 @@ struct ReaderView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if session.ref == ref && session.article != nil {
-                PlayerBar()
+                VStack(spacing: 0) {
+                    if session.chunkMode {
+                        ChunkSelectionBar()
+                    }
+                    PlayerBar()
+                }
+            }
+        }
+        .sheet(isPresented: Bindable(session).chunkReady, onDismiss: { session.cancelChunkSelection() }) {
+            if let r = session.chunkRange, let sid = session.chunkSentence {
+                NavigationStack {
+                    SaveChunkSheet(target: ChunkTarget(ref: ref, sid: sid, first: r.lowerBound, last: r.upperBound,
+                                                       gloss: nil, note: nil, origin: .reader))
+                }
             }
         }
         .overlay(alignment: .top) {
@@ -87,7 +100,10 @@ struct ReaderView: View {
         }
         .onAppear { session.open(ref) }
         .onChange(of: ref) { _, newRef in session.open(newRef) }
-        .onDisappear { session.flushProgress() }
+        .onDisappear {
+            session.flushProgress()
+            session.cancelChunkSelection()
+        }
         .onChange(of: packs.lexiconReady) { _, ready in
             if ready { session.refreshMarks() }
         }
@@ -107,6 +123,8 @@ struct ReaderView: View {
         let curSentPara = curSent.flatMap { session.paragraphIndex(ofSentence: $0) }
         let selPara = selTok.flatMap { session.paragraphIndex(ofToken: $0) }
         let loopPara = loopSid.flatMap { session.paragraphIndex(ofSentence: $0) }
+        let chunkPara = session.chunkSentence.flatMap { session.paragraphIndex(ofSentence: $0) }
+        let chunkRange = session.chunkRange
 
         ScrollViewReader { proxy in
             ScrollView {
@@ -124,7 +142,8 @@ struct ReaderView: View {
                                     curTok: curTokPara == pi ? curTok : nil,
                                     curSent: curSentPara == pi ? curSent : nil,
                                     selTok: selPara == pi ? selTok : nil,
-                                    loopSid: loopPara == pi ? loopSid : nil),
+                                    loopSid: loopPara == pi ? loopSid : nil,
+                                    chunk: chunkPara == pi ? chunkRange : nil),
                                 style: style,
                                 session: session
                             )

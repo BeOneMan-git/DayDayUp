@@ -76,6 +76,7 @@ enum VocabQueueBuilder {
                       estimates: [VocabTask: Double],
                       days: [String: VocabDay],
                       keepNewOn: String?,
+                      archivedItems: Set<String> = [],
                       calendar: Calendar = .current) -> VocabQueue {
         var q = VocabQueue()
         q.budgetSeconds = settings.budgetMinutes * 60
@@ -85,7 +86,8 @@ enum VocabQueueBuilder {
         q.spentSeconds = reviews.compactMap { $0.durationMs }.reduce(0) { $0 + Double($1) / 1000 }
         q.newDoneToday = reviews.filter { $0.before?.isNew == true }.count
 
-        let active = cards.filter { !$0.suspended }
+        // A paused item keeps its cards as they were; they just stay out of the queue.
+        let active = cards.filter { !$0.suspended && !archivedItems.contains($0.itemId) }
         let endOfDay = calendar.startOfDay(for: now).addingTimeInterval(86_400)
 
         // Due now: learning steps first (they are short), then reviews, oldest due first.

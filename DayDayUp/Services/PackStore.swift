@@ -24,6 +24,9 @@ enum PackError: LocalizedError {
     case missingFile(String)
     case corrupt(String)
     case notInstalled
+    case missingFields([String])
+    case unsafePath(String)
+    case duplicateName(String)
 
     var errorDescription: String? {
         switch self {
@@ -32,6 +35,9 @@ enum PackError: LocalizedError {
         case .missingFile(let n): return "内容包缺少文件 \(n)"
         case .corrupt(let n): return "文件校验失败：\(n)"
         case .notInstalled: return "这篇文章的内容包还没导入"
+        case .missingFields(let names): return "内容包说明缺少必填字段：" + names.joined(separator: "、")
+        case .unsafePath(let n): return "内容包里有不安全的文件路径：\(n)"
+        case .duplicateName(let n): return "内容包里有重名文件：\(n)"
         }
     }
 }
@@ -51,13 +57,40 @@ final class PackStore {
     let root: URL
     @ObservationIgnored private var lexiconTask: Task<Void, Never>?
     @ObservationIgnored private var isScanning = false
+    /// Called after an update changed sentences of articles that were already installed (PKG-P03).
+    @ObservationIgnored var onArticlesChanged: (([ArticleDiff]) -> Void)?
+    @ObservationIgnored private var articleCache: [String: Article] = [:]
+    @ObservationIgnored private var cacheOrder: [String] = []
 
     init() {
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         root = support.appendingPathComponent("Packs", isDirectory: true)
         try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        PackStore.recoverInterruptedInstalls(in: root)
         reload()
+    }
+
+    /// An import that stopped half-way (app closed, crash) leaves hidden folders behind:
+    /// put a moved-away old pack back if its place is empty, and remove unfinished copies (ACC-08).
+    nonisolated static func recoverInterruptedInstalls(in root: URL) {
+        let fm = FileManager.default
+        let dirs = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        for dir in dirs where dir.lastPathComponent.hasPrefix(".old-") {
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("manifest.json")),
+               let m = try? JSONDecoder().decode(PackManifest.self, from: data) {
+                let dest = root.appendingPathComponent(safeName(m.packId), isDirectory: true)
+                if !fm.fileExists(atPath: dest.path) {
+                    try? fm.moveItem(at: dir, to: dest)
+                    DiagLog.shared.log("pack", "restored \(m.packId) after an interrupted import")
+                    continue
+                }
+            }
+            try? fm.removeItem(at: dir)
+        }
+        for dir in dirs where dir.lastPathComponent.hasPrefix(".tmp-") {
+            try? fm.removeItem(at: dir)
+        }
     }
 
     // MARK: Listing
@@ -77,6 +110,8 @@ final class PackStore {
         packs = list.sorted {
             ($0.manifest.issue, $0.manifest.part) < ($1.manifest.issue, $1.manifest.part)
         }
+        articleCache = [:]
+        cacheOrder = []
         loadLexicon()
     }
 
@@ -124,6 +159,62 @@ final class PackStore {
     func audioURL(_ ref: ArticleRef) -> URL? {
         guard let found = locate(ref) else { return nil }
         return found.folder.appendingPathComponent(found.meta.audio)
+    }
+
+    /// SHA-256 of the article's audio file, from the manifest (binds clips to one audio version).
+    func audioSha(_ ref: ArticleRef) -> String? {
+        for installed in packs where installed.manifest.issue == ref.issue {
+            if let meta = installed.manifest.articles.first(where: { $0.id == ref.id }) {
+                return installed.manifest.checks[meta.audio]?.sha256.lowercased()
+            }
+        }
+        return nil
+    }
+
+    func pack(for ref: ArticleRef) -> InstalledPack? {
+        packs.first { p in p.manifest.issue == ref.issue && p.manifest.articles.contains { $0.id == ref.id } }
+    }
+
+    /// Article from a small in-memory cache (the reader, the review cards and the word list share it).
+    func cachedArticle(_ ref: ArticleRef) -> Article? {
+        if let a = articleCache[ref.key] { return a }
+        guard let a = try? loadArticle(ref) else { return nil }
+        articleCache[ref.key] = a
+        cacheOrder.append(ref.key)
+        if cacheOrder.count > 12 {
+            articleCache[cacheOrder.removeFirst()] = nil
+        }
+        return a
+    }
+
+    func sentence(_ ref: ArticleRef, sid: Int) -> Sent? {
+        cachedArticle(ref)?.paras.lazy.flatMap(\.sents).first { $0.id == sid }
+    }
+
+    /// Occurrence for a lexicon context "articleId:sentenceId" (V0.1 cards), at the first token with this key.
+    func occurrence(forContext sid: String, key: String, cache: inout [String: Article]) -> Occurrence? {
+        let parts = sid.split(separator: ":").map(String.init)
+        guard parts.count == 2, let n = Int(parts[1]) else { return nil }
+        guard let item = allItems.first(where: { $0.ref.id == parts[0] }) else { return nil }
+        let article: Article
+        if let a = cache[item.ref.key] {
+            article = a
+        } else if let a = cachedArticle(item.ref) {
+            cache[item.ref.key] = a
+            article = a
+        } else {
+            return nil
+        }
+        guard let s = article.paras.lazy.flatMap(\.sents).first(where: { $0.id == n }) else { return nil }
+        let tok = s.toks.first { $0.k == key } ?? s.toks.first { $0.w.lowercased() == key.lowercased() }
+        guard let tok else {
+            var o = Occurrence(issue: item.ref.issue, article: item.ref.id, sid: n)
+            let plain = SentenceText.plain(s)
+            o.sentence = plain
+            o.textHash = SentenceText.hash(plain)
+            return o
+        }
+        return OccurrenceBuilder.make(ref: item.ref, sentence: s, first: tok.i, last: tok.i, audioSha: audioSha(item.ref))
     }
 
     // MARK: Lexicon
@@ -175,11 +266,12 @@ final class PackStore {
         defer { isImporting = false }
         let root = self.root
         do {
-            let (manifest, changed) = try await Task.detached(priority: .userInitiated) {
+            let (manifest, changed, diffs) = try await Task.detached(priority: .userInitiated) {
                 try PackStore.install(archive: url, into: root)
             }.value
             if moveAfterImport { PackStore.moveToImportedFolder(url) }
             if changed { reload() }
+            if !diffs.isEmpty { onArticlesChanged?(diffs) }
             let part = manifest.parts > 1 ? "（第 \(manifest.part)/\(manifest.parts) 部分）" : ""
             let message = changed
                 ? "已导入 \(manifest.issue) 期\(part)，\(manifest.articles.count) 篇"
@@ -225,7 +317,7 @@ final class PackStore {
 
     // MARK: File work (runs off the main actor)
 
-    nonisolated static func install(archive url: URL, into root: URL) throws -> (PackManifest, Bool) {
+    nonisolated static func install(archive url: URL, into root: URL) throws -> (PackManifest, Bool, [ArticleDiff]) {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
 
@@ -235,26 +327,61 @@ final class PackStore {
             throw PackError.noManifest
         }
         let manifest = try JSONDecoder().decode(PackManifest.self, from: data[manifestEntry.range])
-        guard manifest.format == 1 else { throw PackError.unsupportedFormat(manifest.format) }
+        guard manifest.format == 1 || manifest.format == 2 else { throw PackError.unsupportedFormat(manifest.format) }
+        let missing = manifest.missingRequiredFields
+        guard missing.isEmpty else { throw PackError.missingFields(missing) }
+
+        // Paths must stay inside the pack folder, and each name may appear once (PKG-P02).
+        var names = Set<String>()
+        for entry in entries {
+            let n = entry.name
+            if n.hasPrefix("/") || n.contains("..") || n.contains("\\") || n.isEmpty {
+                throw PackError.unsafePath(n)
+            }
+            if !names.insert(n).inserted { throw PackError.duplicateName(n) }
+        }
 
         // Verify every listed file: size and SHA-256.
-        if let files = manifest.files {
-            for (name, info) in files {
-                guard let entry = entries.first(where: { $0.name == name }) else {
-                    throw PackError.missingFile(name)
-                }
-                guard entry.range.count == info.size, sha256(data[entry.range]) == info.sha256.lowercased() else {
-                    throw PackError.corrupt(name)
-                }
+        for (name, info) in manifest.checks {
+            guard let entry = entries.first(where: { $0.name == name }) else {
+                throw PackError.missingFile(name)
+            }
+            guard entry.range.count == info.size, sha256(data[entry.range]) == info.sha256.lowercased() else {
+                throw PackError.corrupt(name)
+            }
+        }
+        // Every article's text and audio must be in the pack.
+        for meta in manifest.articles {
+            for name in ["articles/\(meta.id).json", meta.audio] where !names.contains(name) {
+                throw PackError.missingFile(name)
             }
         }
 
         let fm = FileManager.default
         let dest = root.appendingPathComponent(safeName(manifest.packId), isDirectory: true)
         let oldManifestURL = dest.appendingPathComponent("manifest.json")
-        if let old = try? JSONDecoder().decode(PackManifest.self, from: Data(contentsOf: oldManifestURL)),
-           old.version == manifest.version {
-            return (manifest, false)
+        let oldManifest = try? JSONDecoder().decode(PackManifest.self, from: Data(contentsOf: oldManifestURL))
+        if let old = oldManifest, old.version == manifest.version {
+            return (manifest, false, [])
+        }
+
+        // An update of an installed pack: compare sentences before the old files go away.
+        var diffs: [ArticleDiff] = []
+        if let old = oldManifest {
+            let decoder = JSONDecoder()
+            for meta in old.articles {
+                let ref = ArticleRef(issue: old.issue, id: meta.id)
+                guard let oldArticle = try? decoder.decode(Article.self, from: Data(contentsOf: dest.appendingPathComponent("articles/\(meta.id).json"))) else { continue }
+                var newHashes: [Int: String] = [:]
+                if let entry = entries.first(where: { $0.name == "articles/\(meta.id).json" }),
+                   manifest.issue == old.issue,
+                   let newArticle = try? decoder.decode(Article.self, from: data[entry.range]) {
+                    newHashes = PackDiffer.hashes(newArticle)
+                }
+                let d = PackDiffer.diff(article: ref, old: PackDiffer.hashes(oldArticle), new: newHashes,
+                                        idMap: manifest.idMap?[meta.id])
+                if d.hasChanges { diffs.append(d) }
+            }
         }
 
         let temp = root.appendingPathComponent(".tmp-\(UUID().uuidString)", isDirectory: true)
@@ -265,15 +392,23 @@ final class PackStore {
                 try fm.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try Data(data[entry.range]).write(to: out, options: .atomic)
             }
-            if fm.fileExists(atPath: dest.path) {
-                try fm.removeItem(at: dest)
-            }
-            try fm.moveItem(at: temp, to: dest)
         } catch {
             try? fm.removeItem(at: temp)
             throw error
         }
-        return (manifest, true)
+        // Swap folders so a failure never leaves the old pack half-deleted (ACC-08).
+        let previous = root.appendingPathComponent(".old-\(UUID().uuidString)", isDirectory: true)
+        let hadOld = fm.fileExists(atPath: dest.path)
+        do {
+            if hadOld { try fm.moveItem(at: dest, to: previous) }
+            try fm.moveItem(at: temp, to: dest)
+        } catch {
+            if hadOld, !fm.fileExists(atPath: dest.path) { try? fm.moveItem(at: previous, to: dest) }
+            try? fm.removeItem(at: temp)
+            throw error
+        }
+        if hadOld { try? fm.removeItem(at: previous) }
+        return (manifest, true, diffs)
     }
 
     /// After an automatic import, the file moves to Documents/已导入 so it is not imported again.

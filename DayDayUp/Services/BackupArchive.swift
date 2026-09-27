@@ -61,6 +61,11 @@ struct BackupMeta: Codable {
     var speaking: Int
     var writing: Int
     var recordings: Int
+    // Format 2 (V0.3+): the vocabulary files and any other data files in the backup.
+    var vocabItems: Int?
+    var vocabCards: Int?
+    var vocabEvents: Int?
+    var dataFiles: [String]?
 }
 
 /// What a backup file contains, read back before anything is replaced.
@@ -70,6 +75,11 @@ struct BackupContents {
     var practice: PracticeState?          // nil for an old V0.1 backup (user.json only)
     var recordings: [String: Data]
     var missingRecordings: Int
+    var vocab: VocabState? = nil          // nil for backups made before V0.3
+    var vocabEvents: [ReviewEvent] = []
+    var badEventLines = 0
+    /// Other data files by name (annotations, plans …), restored by their own stores.
+    var files: [String: Data] = [:]
 
     var summary: String {
         var lines = ["生词 \(user.star.count) 个，认识的词 \(user.known.count) 个，听读记录 \(user.daily.count) 天。"]
@@ -81,6 +91,14 @@ struct BackupContents {
             }
         } else {
             lines.append("这是 V0.1 的旧备份，只含单词和听读记录；恢复时现有的跟读和说写记录保持不变。")
+        }
+        if let v = vocab {
+            lines.append("词汇：条目 \(v.items.count) 个，复习卡 \(v.cards.count) 张，作答记录 \(vocabEvents.count) 条。")
+            if badEventLines > 0 {
+                lines.append("注意：有 \(badEventLines) 行作答记录读不出来，会被跳过。")
+            }
+        } else {
+            lines.append("这个备份比 V0.3 早，没有词汇复习记录；恢复时现有的词汇记录保持不变。")
         }
         return lines.joined(separator: "\n")
     }
@@ -99,11 +117,13 @@ enum BackupError: LocalizedError {
 }
 
 enum BackupArchive {
-    static let format = 1
+    /// 1 = V0.2 (user, practice, recordings); 2 = V0.3+ (adds vocab.json, vocab-events.jsonl, other data files).
+    static let format = 2
 
     /// Builds a full backup. Every .m4a in the Recordings folder is included.
     @MainActor
-    static func make(user: UserStore, practice: PracticeStore) throws -> Data {
+    static func make(user: UserStore, practice: PracticeStore,
+                     extraFiles: [(name: String, data: Data)] = []) throws -> Data {
         var userState = user.state
         userState.lastBackup = Date()
         let userData = try UserStore.encoder.encode(userState)
@@ -124,18 +144,27 @@ enum BackupArchive {
         }
 
         let p = practice.state
-        let meta = BackupMeta(format: format, created: Date(), app: appVersionText(),
+        var meta = BackupMeta(format: format, created: Date(), app: appVersionText(),
                               starred: userState.star.count, known: userState.known.count,
                               days: userState.daily.count, shadow: p.shadow.count,
                               speaking: p.speaking.count, writing: p.writing.count,
                               recordings: recordings.count)
+        meta.dataFiles = extraFiles.map(\.name)
+        if let v = extraFiles.first(where: { $0.name == "vocab.json" }),
+           let state = try? DataCoding.decoder.decode(VocabState.self, from: v.data) {
+            meta.vocabItems = state.items.count
+            meta.vocabCards = state.cards.count
+        }
+        if let e = extraFiles.first(where: { $0.name == "vocab-events.jsonl" }) {
+            meta.vocabEvents = JSONLines<ReviewEvent>.decode(e.data).records.count
+        }
         let metaData = try UserStore.encoder.encode(meta)
         let head: [(name: String, data: Data)] = [
             (name: "ddubackup.json", data: metaData),
             (name: "user.json", data: userData),
             (name: "practice.json", data: practiceData),
         ]
-        return TarWriter.archive(head + recordings)
+        return TarWriter.archive(head + extraFiles + recordings)
     }
 
     /// Reads a full backup (.ddubackup) or an old V0.1 backup (plain user.json).
@@ -163,10 +192,24 @@ enum BackupArchive {
             guard !name.isEmpty, !name.contains("/") else { continue }
             recordings[name] = Data(data[entry.range])
         }
-        let referenced = Set(practice.shadow.compactMap { $0.file } + practice.speaking.compactMap { $0.file })
-        let missing = referenced.subtracting(recordings.keys).count
-        return BackupContents(meta: meta, user: user, practice: practice,
-                              recordings: recordings, missingRecordings: missing)
+        var contents = BackupContents(meta: meta, user: user, practice: practice,
+                                      recordings: recordings, missingRecordings: 0)
+        if let v = body("vocab.json") {
+            contents.vocab = try DataCoding.decoder.decode(VocabState.self, from: v)
+            let events = JSONLines<ReviewEvent>.decode(body("vocab-events.jsonl") ?? Data())
+            contents.vocabEvents = events.records
+            contents.badEventLines = events.badLines
+        }
+        for entry in entries where !entry.name.hasPrefix(prefix) && !entry.name.contains("/") {
+            let known = ["ddubackup.json", "user.json", "practice.json", "vocab.json", "vocab-events.jsonl"]
+            if !known.contains(entry.name) {
+                contents.files[entry.name] = Data(data[entry.range])
+            }
+        }
+        var referenced = Set(practice.shadow.compactMap { $0.file } + practice.speaking.compactMap { $0.file })
+        referenced.formUnion(contents.vocabEvents.compactMap { $0.evidence }.filter { $0.hasSuffix(".m4a") })
+        contents.missingRecordings = referenced.subtracting(recordings.keys).count
+        return contents
     }
 
     static func isTar(_ data: Data) -> Bool {

@@ -82,6 +82,15 @@ final class QueueTests: XCTestCase {
         XCTAssertEqual(q.newDoneToday, 0)
     }
 
+    func testPausedItemsStayOutOfTheQueue() {
+        let cards = [card("a", new: false), card("b", new: false), card("c", new: true)]
+        let q = VocabQueueBuilder.build(cards: cards, settings: VocabSettings(), now: now, today: today, todayEvents: [],
+                                        estimates: VocabQueueBuilder.estimates(from: []), days: [:], keepNewOn: nil,
+                                        archivedItems: ["b", "c"])
+        XCTAssertEqual(q.entries.map(\.card.itemId), ["a"])
+        XCTAssertEqual(q.newCount, 0)
+    }
+
     func testEstimatesUseMedian() {
         var events: [ReviewEvent] = []
         for ms in [5000, 7000, 9000, 11000, 400_000] {

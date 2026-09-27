@@ -35,7 +35,9 @@ struct WordCardView: View {
     @Environment(ReadingSession.self) private var session
     @Environment(PackStore.self) private var packs
     @Environment(UserStore.self) private var user
+    @Environment(VocabStore.self) private var vocab
     @Environment(PlaybackEngine.self) private var engine
+    @State private var senseTarget: SenseTarget?
 
     var body: some View {
         if let i = session.selectedTok, let info = session.info(i) {
@@ -75,8 +77,8 @@ struct WordCardView: View {
                     }
                 }
                 Spacer()
-                if band > 0, let key = t.k {
-                    wordActions(key)
+                if let key = t.k, entry?.num != true {
+                    wordActions(key, info: info)
                 }
             }
 
@@ -137,6 +139,11 @@ struct WordCardView: View {
 
             SentenceBox(sid: info.sid, markToken: t.i)
         }
+        .sheet(item: $senseTarget) { target in
+            NavigationStack {
+                SaveSenseSheet(target: target)
+            }
+        }
     }
 
     private func displayLemma(_ key: String?) -> String {
@@ -150,24 +157,38 @@ struct WordCardView: View {
         return anns.contains { $0.t == "e" && $0.covers(info.tok.i) }
     }
 
-    private func wordActions(_ key: String) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                session.toggleStar(key)
-            } label: {
-                Label("生词", systemImage: user.isStarred(key) ? "star.fill" : "star")
+    private func wordActions(_ key: String, info: TokInfo) -> some View {
+        let saved = vocab.items(forKey: key)
+        return VStack(alignment: .trailing, spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    if let ref = session.ref {
+                        senseTarget = SenseTarget(ref: ref, sid: info.sid, tokIndex: info.tok.i, key: key, word: info.tok.w)
+                    }
+                } label: {
+                    Label(saved.isEmpty ? "收藏这个义项" : "已收藏 \(saved.count) 个义项",
+                          systemImage: saved.isEmpty ? "bookmark" : "bookmark.fill")
+                }
+                .buttonStyle(.bordered)
+                .tint(saved.isEmpty ? Color.secondary : Theme.level5)
+                Button {
+                    session.toggleKnown(key)
+                } label: {
+                    Label("认识", systemImage: user.isKnown(key) ? "checkmark.circle.fill" : "checkmark.circle")
+                }
+                .buttonStyle(.bordered)
+                .tint(user.isKnown(key) ? Color.green : Color.secondary)
+                .help("只作标记，不排复习")
             }
-            .buttonStyle(.bordered)
-            .tint(user.isStarred(key) ? Color.orange : Color.secondary)
             Button {
-                session.toggleKnown(key)
+                session.startChunkSelection(from: info.tok.i)
             } label: {
-                Label("认识", systemImage: user.isKnown(key) ? "checkmark.circle.fill" : "checkmark.circle")
+                Label("从这个词开始选词群", systemImage: "text.badge.plus")
             }
-            .buttonStyle(.bordered)
-            .tint(user.isKnown(key) ? Color.green : Color.secondary)
+            .buttonStyle(.borderless)
+            .font(.callout)
         }
-        .controlSize(.small)
+        .controlSize(.regular)
     }
 
     private func pronButton(_ label: String, _ text: String?, ai: Bool, action: @escaping () -> Void) -> some View {
@@ -190,17 +211,32 @@ struct WordCardView: View {
 /// Phrase / entity / number / rare-sense notes of the sentence that cover one token.
 struct AnnotationNotes: View {
     @Environment(ReadingSession.self) private var session
+    @Environment(VocabStore.self) private var vocab
+    @State private var chunkTarget: ChunkTarget?
     let sid: Int
     let tokenIndex: Int
 
     var body: some View {
         let anns = (session.sentence(sid)?.ann ?? []).filter { $0.covers(tokenIndex) }
+        VStack(alignment: .leading, spacing: 14) {
         ForEach(Array(anns.enumerated()), id: \.offset) { _, a in
             switch a.t {
             case "p":
                 NoteBox(label: "所在短语" + ((a.type ?? "").isEmpty ? "" : " · \(a.type ?? "")"), tint: Theme.level5) {
                     Text("\(a.text ?? "")　\(a.zh ?? "")").font(.body.weight(.medium))
                     if let note = a.note { Text(note).font(.callout).foregroundStyle(.secondary) }
+                    if a.r.count == 2, let ref = session.ref {
+                        let saved = vocab.chunk(text: a.text ?? "") != nil
+                        Button {
+                            chunkTarget = ChunkTarget(ref: ref, sid: sid, first: a.r[0], last: a.r[1],
+                                                      gloss: a.zh, note: a.note, origin: .annotation)
+                        } label: {
+                            Label(saved ? "已在词群库（再加一句语境）" : "收藏为词群",
+                                  systemImage: saved ? "checkmark.circle" : "plus.circle")
+                        }
+                        .buttonStyle(.bordered)
+                        .frame(minHeight: 44)
+                    }
                 }
             case "e":
                 NoteBox(label: "专有名词", tint: Theme.level6) {
@@ -223,6 +259,12 @@ struct AnnotationNotes: View {
                 }
             default:
                 EmptyView()
+            }
+        }
+        }
+        .sheet(item: $chunkTarget) { target in
+            NavigationStack {
+                SaveChunkSheet(target: target)
             }
         }
     }
@@ -505,7 +547,7 @@ struct VocabListPanel: View {
     @State private var byLevel = false
 
     private let filters: [(String, String)] = [
-        ("all", "全部"), ("5", "5级"), ("6", "6级"), ("7", "7级"), ("8", "8级"), ("star", "生词本"), ("trap", "易错义"),
+        ("all", "全部"), ("5", "5级"), ("6", "6级"), ("7", "7级"), ("8", "8级"), ("star", "已收藏"), ("trap", "易错义"),
     ]
 
     var body: some View {
@@ -550,7 +592,7 @@ struct VocabListPanel: View {
                     } label: {
                         HStack(spacing: 10) {
                             Circle().fill(Theme.level(row.band)).frame(width: 9, height: 9)
-                            Text(row.key + (user.isStarred(row.key) ? " ★" : ""))
+                            Text(row.key + (session.isSaved(row.key) ? " ★" : ""))
                                 .font(.body.weight(.semibold))
                             Text(meaning(row))
                                 .font(.callout)
@@ -576,7 +618,7 @@ struct VocabListPanel: View {
     private func matches(_ row: VocabRow) -> Bool {
         switch filter {
         case "all": return true
-        case "star": return user.isStarred(row.key)
+        case "star": return session.isSaved(row.key)
         case "trap": return isTrap(row)
         default: return String(row.band) == filter
         }
@@ -590,7 +632,7 @@ struct VocabListPanel: View {
         var c: [String: Int] = ["all": rows.count]
         for r in rows {
             c[String(r.band), default: 0] += 1
-            if user.isStarred(r.key) { c["star", default: 0] += 1 }
+            if session.isSaved(r.key) { c["star", default: 0] += 1 }
             if user.isKnown(r.key) { c["known", default: 0] += 1 }
             if isTrap(r) { c["trap", default: 0] += 1 }
         }

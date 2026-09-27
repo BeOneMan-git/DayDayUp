@@ -1,8 +1,9 @@
 import Foundation
 
-// Content pack schema, format 1.
+// Content pack schema, formats 1 and 2.
 // A pack (.ecopack) is a plain USTAR tar:
 //   manifest.json, lexicon.json, articles/<id>.json, audio/<id>.m4a
+//   format 2 adds annotations/<id>.json (V0.4) and quiz/<id>.json (V0.5)
 // Every field that the pipeline may leave out is optional here.
 
 struct PackManifest: Codable, Hashable, Sendable {
@@ -16,10 +17,54 @@ struct PackManifest: Codable, Hashable, Sendable {
     var created: String?
     var articles: [ArticleMeta]
     var files: [String: FileInfo]?
+    // Format 2 (PKG-P01 / DATA-12): package identity and revision, producer, asset list.
+    var schemaVersion: Int?
+    var packageId: String?
+    var packageRevision: Int?
+    var producer: String?
+    var createdAt: String?
+    var sourceInfo: [String: String]?
+    var assets: [AssetInfo]?
+    /// Old sentence id -> new sentence id (or null = removed), per article (PKG-P03).
+    var idMap: [String: [String: Int?]]?
+    /// How the content was made, per kind: "machine" / "checked" (IMP-F05).
+    var provenance: [String: String]?
 
     struct FileInfo: Codable, Hashable, Sendable {
         var size: Int
         var sha256: String
+    }
+
+    struct AssetInfo: Codable, Hashable, Sendable {
+        var path: String
+        var mediaType: String?
+        var byteLength: Int
+        var sha256: String
+        var duration: Double?
+        var codec: String?
+    }
+
+    /// Size and hash per file, from `assets` (format 2) or `files` (format 1).
+    var checks: [String: FileInfo] {
+        var out = files ?? [:]
+        for a in assets ?? [] {
+            out[a.path] = FileInfo(size: a.byteLength, sha256: a.sha256)
+        }
+        return out
+    }
+
+    /// Fields a format-2 manifest must have. Empty when all are there.
+    var missingRequiredFields: [String] {
+        guard format >= 2 else { return [] }
+        var out: [String] = []
+        if schemaVersion == nil { out.append("schemaVersion") }
+        if (packageId ?? "").isEmpty { out.append("packageId") }
+        if packageRevision == nil { out.append("packageRevision") }
+        if (producer ?? "").isEmpty { out.append("producer") }
+        if (createdAt ?? "").isEmpty { out.append("createdAt") }
+        if assets == nil { out.append("assets") }
+        if articles.isEmpty { out.append("articles") }
+        return out
     }
 }
 
@@ -34,6 +79,10 @@ struct ArticleMeta: Codable, Hashable, Sendable, Identifiable {
     var n5: Int?
     var topics: [String]?
     var audio: String
+    var contentRevision: Int?
+    /// Resource list (PKG-P04): text / audio / timing / wordAudio / senses / annotations / quiz / pdf
+    /// -> "available" / "missing" / "not-required".
+    var deps: [String: String]?
 }
 
 // MARK: - Article
@@ -54,6 +103,7 @@ struct Para: Codable, Sendable {
     /// "p" paragraph, "h" sub-heading, "rub" rubric (stand-first)
     var kind: String
     var sents: [Sent]
+    var pid: String?
 }
 
 struct Sent: Codable, Sendable, Identifiable {
@@ -66,6 +116,8 @@ struct Sent: Codable, Sendable, Identifiable {
     var allu: String?
     var ann: [Ann]?
     var toks: [Tok]
+    var h: String?          // format 2: hash of the sentence text (SentenceText.hash)
+    var al: String?         // format 2: alignment "machine" / "none" / "calibrated"
 
     var isTimed: Bool { s != nil && e != nil }
 }

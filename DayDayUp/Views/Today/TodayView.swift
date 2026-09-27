@@ -7,6 +7,7 @@ struct TodayView: View {
     @Environment(PackStore.self) private var packs
     @Environment(UserStore.self) private var user
     @Environment(PracticeStore.self) private var practice
+    @Environment(VocabStore.self) private var vocab
     @Environment(Router.self) private var router
     @Environment(ReadingSession.self) private var session
     @Environment(PlaybackEngine.self) private var engine
@@ -152,7 +153,7 @@ struct TodayView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("最近 7 天").font(.headline)
                 Spacer()
-                Text("听读 \(Int(total.rounded())) 分钟 · 听完 \(finished)/\(packs.articleCount) 篇 · 生词本 \(user.state.star.count) 个")
+                Text("听读 \(Int(total.rounded())) 分钟 · 听完 \(finished)/\(packs.articleCount) 篇 · 词汇 \(vocab.activeItems.count) 条")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -170,6 +171,7 @@ struct TodayView: View {
 
     private var practiceCard: some View {
         let today = practice.summary(for: DayKey.today)
+        let q = vocab.queue()
         return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text("今日练习").font(.headline)
@@ -178,6 +180,10 @@ struct TodayView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
+            Text(q.dueCount + q.newAllowed > 0
+                 ? "词汇：到期 \(q.dueCount) 张，新任务 \(q.newAllowed) 个，预算 \(Int(q.budgetSeconds / 60)) 分钟。"
+                 : "词汇：今日暂无到期。")
+                .font(.callout)
             Text("每天一个小闭环：听读一段 → 跟读 1–2 句 → 口语 1 题 → 写作 1 题 → 每周备份一次。")
                 .foregroundStyle(.secondary)
             HStack(spacing: 12) {
@@ -190,6 +196,11 @@ struct TodayView: View {
                     router.tab = .ielts
                 } label: {
                     Label("去练说写", systemImage: "text.bubble")
+                }
+                Button {
+                    router.tab = .vocab
+                } label: {
+                    Label("去复习词汇", systemImage: "character.book.closed")
                 }
             }
             .buttonStyle(.bordered)

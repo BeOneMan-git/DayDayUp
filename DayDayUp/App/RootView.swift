@@ -4,6 +4,10 @@ import SwiftUI
 /// (sidebarAdaptable), as Apple's HIG suggests for iPad.
 struct RootView: View {
     @Environment(Router.self) private var router
+    @Environment(PackStore.self) private var packs
+    @Environment(UserStore.self) private var user
+    @Environment(VocabStore.self) private var vocab
+    @Environment(ReadingSession.self) private var session
 
     var body: some View {
         TabView(selection: Bindable(router).tab) {
@@ -35,5 +39,11 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .task(id: packs.lexiconReady) {
+            // V0.2 生词本 → V0.3 vocabulary items, once, after the lexicon is loaded.
+            guard packs.lexiconReady else { return }
+            vocab.migrateFromV02IfNeeded(user: user, packs: packs)
+            session.refreshUserMarks()
+        }
     }
 }

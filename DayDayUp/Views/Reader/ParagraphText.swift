@@ -16,6 +16,7 @@ struct ParagraphHighlight: Equatable {
     var curSent: Int?
     var selTok: Int?
     var loopSid: Int?
+    var chunk: ClosedRange<Int>? = nil
 }
 
 /// One paragraph rendered as a single native Text.
@@ -174,6 +175,10 @@ struct ParagraphView: View, Equatable {
         }
         if m.star {
             c.backgroundColor = Theme.starred
+        }
+        if let r = highlight.chunk, r.contains(t.i) {
+            c.backgroundColor = Theme.chunkSelection
+            c.underlineStyle = Text.LineStyle(pattern: .solid, color: Theme.level5)
         }
         if highlight.selTok == t.i {
             c.backgroundColor = Theme.selectedWord
