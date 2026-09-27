@@ -1,0 +1,84 @@
+# XcodeGen spec. The CI runs `xcodegen generate` to create DayDayUp.xcodeproj,
+# so the Xcode project file never needs to be edited by hand.
+name: DayDayUp
+options:
+  bundleIdPrefix: com.daydayup
+  deploymentTarget:
+    iOS: "26.0"
+  developmentLanguage: zh-Hans
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  DayDayUp:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: DayDayUp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daydayup.app
+        PRODUCT_NAME: DayDayUp
+        TARGETED_DEVICE_FAMILY: "2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: "NO"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        ENABLE_PREVIEWS: "YES"
+    info:
+      path: DayDayUp/Info.plist
+      properties:
+        CFBundleDisplayName: DayDayUp
+        CFBundleDevelopmentRegion: zh-Hans
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        "UISupportedInterfaceOrientations":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes:
+          - audio
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+        NSMicrophoneUsageDescription: 跟读时录下你的声音，只在这台 iPad 上用来评分，不会上传。
+        NSSpeechRecognitionUsageDescription: 把你的跟读录音转成文字，用来评分；识别在这台 iPad 上完成。
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: DayDayUp 内容包
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Owner
+            LSItemContentTypes:
+              - com.daydayup.ecopack
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.daydayup.ecopack
+            UTTypeDescription: DayDayUp 内容包
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - ecopack
+              public.mime-type:
+                - application/x-ecopack
+schemes:
+  DayDayUp:
+    build:
+      targets:
+        DayDayUp: all
+    run:
+      config: Debug
+    archive:
+      config: Release
