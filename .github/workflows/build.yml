@@ -72,7 +72,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p LogicTests/Sources/DDULogic
-          cp DayDayUp/Logic/*.swift DayDayUp/Models/PackModels.swift LogicTests/Sources/DDULogic/
+          cp DayDayUp/Logic/*.swift DayDayUp/Models/PackModels.swift DayDayUp/Models/PracticeModels.swift LogicTests/Sources/DDULogic/
           swift test --package-path LogicTests 2>&1 | tee logic-tests.log | grep -E "error:|failed|passed|Executed" | tail -60
 
       - name: Show logic test failures

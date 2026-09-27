@@ -7,6 +7,7 @@ struct DayDayUpApp: App {
     @State private var practice: PracticeStore
     @State private var vocab: VocabStore
     @State private var annotations: AnnotationStore
+    @State private var study: StudyStore
     @State private var engine: PlaybackEngine
     @State private var session: ReadingSession
     @State private var recorder: RecorderService
@@ -28,6 +29,7 @@ struct DayDayUpApp: App {
         _practice = State(initialValue: PracticeStore())
         _vocab = State(initialValue: vocab)
         _annotations = State(initialValue: AnnotationStore())
+        _study = State(initialValue: StudyStore())
         _engine = State(initialValue: engine)
         _session = State(initialValue: session)
         _recorder = State(initialValue: recorder)
@@ -43,6 +45,7 @@ struct DayDayUpApp: App {
                 .environment(practice)
                 .environment(vocab)
                 .environment(annotations)
+                .environment(study)
                 .environment(engine)
                 .environment(session)
                 .environment(recorder)
@@ -64,13 +67,18 @@ struct DayDayUpApp: App {
             case .background, .inactive:
                 if phase == .background {
                     recorder.interrupt(reason: "app in background")
+                    ActivityClock.shared.flush()
+                    ActivityClock.shared.appActive = false
                 }
                 session.flushProgress()
                 user.saveNow()
                 practice.saveNow()
                 vocab.saveNow()
                 annotations.saveNow()
+                study.saveNow()
             case .active:
+                ActivityClock.shared.appActive = true
+                ActivityClock.shared.flushBackground()
                 recorder.refreshPermission()
                 vocab.noteDayStart()
                 Task { await packs.scanInbox() }

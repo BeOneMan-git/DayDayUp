@@ -89,6 +89,7 @@ final class SegmentPlayer {
 
         try? AVAudioSession.sharedInstance().setActive(true)
         playing = source
+        ActivityClock.shared.touch()
         return await withCheckedContinuation { continuation in
             waiter = continuation
             let center = NotificationCenter.default

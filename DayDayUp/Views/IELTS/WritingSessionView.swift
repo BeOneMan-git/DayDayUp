@@ -176,6 +176,7 @@ struct WritingSessionView: View {
             ticker = nil
         }
         .onChange(of: text) { _, newValue in
+            ActivityClock.shared.touch(.output, source: "writing")
             saveText(newValue)
         }
         .onChange(of: scenePhase) { _, newPhase in

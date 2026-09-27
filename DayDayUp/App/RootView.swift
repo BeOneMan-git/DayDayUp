@@ -39,11 +39,26 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .simultaneousGesture(TapGesture().onEnded { ActivityClock.shared.touch() })
+        .onChange(of: router.tab, initial: true) { _, tab in
+            ActivityClock.shared.currentCategory = RootView.category(for: tab)
+        }
         .task(id: packs.lexiconReady) {
             // V0.2 生词本 → V0.3 vocabulary items, once, after the lexicon is loaded.
             guard packs.lexiconReady else { return }
             vocab.migrateFromV02IfNeeded(user: user, packs: packs)
             session.refreshUserMarks()
+        }
+    }
+
+    /// Practice pages count taps as practice time; 今日, 进度 and 设置 do not.
+    static func category(for tab: AppTab) -> StudyCategory? {
+        switch tab {
+        case .library: return .read
+        case .shadow: return .shadow
+        case .vocab: return .vocab
+        case .ielts: return .output
+        case .today, .progress, .settings: return nil
         }
     }
 }

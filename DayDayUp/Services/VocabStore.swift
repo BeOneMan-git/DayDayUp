@@ -359,6 +359,8 @@ final class VocabStore {
         }
         appendEvents([e])
         saveNow()
+        ActivityClock.shared.touch(.vocab, from: date.addingTimeInterval(-Double(details.durationMs) / 1000),
+                                   source: "vocab", at: date)
         return e
     }
 
@@ -400,6 +402,7 @@ final class VocabStore {
         var e = ReviewEvent(kind: .listen, itemId: itemId, at: Date())
         e.source = source
         appendEvents([e])
+        ActivityClock.shared.touch(.vocab, source: "listen")
     }
 
     // MARK: Evidence

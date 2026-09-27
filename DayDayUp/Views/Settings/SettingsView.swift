@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(PracticeStore.self) private var practice
     @Environment(VocabStore.self) private var vocab
     @Environment(AnnotationStore.self) private var annotations
+    @Environment(StudyStore.self) private var study
     @Environment(ReadingSession.self) private var session
 
     private enum ImportMode { case packs, backup }
@@ -206,7 +207,8 @@ struct SettingsView: View {
         vocab.saveNow()
         do {
             annotations.saveNow()
-            let extra = try vocab.backupFiles() + [try annotations.backupFile()]
+            study.saveNow()
+            let extra = try vocab.backupFiles() + [try annotations.backupFile()] + (try study.backupFiles())
             let data = try BackupArchive.make(user: user, practice: practice, extraFiles: extra)
             backupDoc = BackupDocument(data: data)
             showExporter = true
@@ -227,6 +229,9 @@ struct SettingsView: View {
             }
             if let data = contents.files["annotations-user.json"] {
                 try annotations.restore(data)
+            }
+            if contents.files["study.json"] != nil || contents.files["activity.jsonl"] != nil {
+                try study.restore(study: contents.files["study.json"], activity: contents.files["activity.jsonl"])
             }
             user.restore(contents.user)
             session.refreshMarks()

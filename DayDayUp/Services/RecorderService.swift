@@ -220,8 +220,22 @@ final class RecorderService {
         DiagLog.shared.log("record", "stop \(String(format: "%.1f", seconds))s peak=\(Int(maxPeak))dB silent=\(result.silent) interrupted=\(interrupted)")
         let done = onFinish
         onFinish = nil
+        let who = owner
         owner = nil
+        // The whole take counts as practice time for the page that recorded it (MET-01).
+        ActivityClock.shared.touch(RecorderService.category(forOwner: who),
+                                   from: Date().addingTimeInterval(-seconds), source: who)
         done?(result)
+    }
+
+    /// Which practice kind a recording belongs to, from the screen that started it.
+    static func category(forOwner owner: String?) -> StudyCategory? {
+        switch owner {
+        case "shadow": return .shadow
+        case "vocab": return .vocab
+        case "speaking", "part2", "mock", "baseline": return .output
+        default: return nil
+        }
     }
 
     private func startMeter() {

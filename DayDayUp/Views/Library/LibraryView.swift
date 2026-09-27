@@ -151,6 +151,7 @@ struct ArticleRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                ResourceChips(ref: item.ref)
             }
             Spacer(minLength: 8)
             HStack(spacing: 8) {
@@ -163,3 +164,32 @@ struct ArticleRow: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+/// PKG-P04: what this article offers offline. Missing resources are named; nothing pretends to be there.
+struct ResourceChips: View {
+    @Environment(PackStore.self) private var packs
+    let ref: ArticleRef
+
+    var body: some View {
+        let list = packs.resources(ref).list
+        let have = list.filter { $0.1 == .available }.map(\.0)
+        let missing = list.filter { $0.1 == .missing }.map(\.0)
+        HStack(spacing: 6) {
+            if !have.isEmpty {
+                Text("有：" + have.joined(separator: "·"))
+                    .foregroundStyle(.secondary)
+            }
+            if !missing.isEmpty {
+                Text("缺：" + missing.joined(separator: "、"))
+                    .foregroundStyle(Theme.warn)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .overlay(Capsule().strokeBorder(Theme.warn.opacity(0.6), lineWidth: 1))
+            }
+        }
+        .font(.caption2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("资源：有 \(have.joined(separator: "、"))" + (missing.isEmpty ? "" : "；缺 \(missing.joined(separator: "、"))"))
+    }
+}
+

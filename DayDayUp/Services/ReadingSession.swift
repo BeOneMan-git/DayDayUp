@@ -603,6 +603,7 @@ final class ReadingSession {
             lastWall = nil
             return
         }
+        ActivityClock.shared.touch(.read, source: "reader")
         let now = Date()
         if let last = lastWall {
             let dt = now.timeIntervalSince(last)

@@ -138,6 +138,7 @@ struct WordCardView: View {
             }
 
             SentenceBox(sid: info.sid, markToken: t.i)
+            ProvenanceNote(kinds: ["cards", "translation"])
         }
         .sheet(item: $senseTarget) { target in
             NavigationStack {
@@ -389,8 +390,10 @@ struct SentencePanel: View {
                 Text(ReadingSession.plainText(s))
                     .font(Font.system(.title3, design: .serif))
                     .textSelection(.enabled)
-                if let zh = s.zh {
+                if let zh = s.zh, !zh.isEmpty {
                     Text(zh).foregroundStyle(.secondary).textSelection(.enabled)
+                } else {
+                    Text("译文：暂无").font(.callout).foregroundStyle(.secondary)
                 }
                 SentenceButtons(sid: s.id)
                 Button {
@@ -431,6 +434,9 @@ struct SentencePanel: View {
                     }
                 }
             }
+            if (s.gram ?? "").isEmpty && s.isTimed {
+                Text("长难句拆解：暂无").font(.callout).foregroundStyle(.secondary)
+            }
             annotationGroup(s, "p", "短语与搭配")
             annotationGroup(s, "s", "熟词僻义")
             annotationGroup(s, "e", "专有名词")
@@ -459,6 +465,7 @@ struct SentencePanel: View {
                     }
                 }
             }
+            ProvenanceNote(kinds: ["translation", "grammar", "notes"])
         }
     }
 
@@ -644,3 +651,51 @@ struct VocabListPanel: View {
         return session.context(card, sid: row.sid)?.m ?? card?.senses?.first?.zh ?? ""
     }
 }
+
+/// IMP-F05: where the explanations come from and whether a person checked them.
+/// Content made by the pipeline is labelled as machine-made; nothing here claims on-device generation.
+struct ProvenanceNote: View {
+    @Environment(ReadingSession.self) private var session
+    @Environment(PackStore.self) private var packs
+    let kinds: [String]
+
+    var body: some View {
+        if let ref = session.ref, let pack = packs.pack(for: ref) {
+            let m = pack.manifest
+            let revision = m.packageRevision.map { "第 \($0) 版" } ?? m.version
+            VStack(alignment: .leading, spacing: 4) {
+                Text("来源：\(m.issue) 期内容包 · \(revision)")
+                ForEach(kinds, id: \.self) { kind in
+                    Text("\(ProvenanceNote.title(kind))：\(ProvenanceNote.state(m.provenance?[kind]))")
+                }
+                Text("发现错误可以点“报错”。")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 4)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    static func title(_ kind: String) -> String {
+        switch kind {
+        case "cards": return "词卡"
+        case "translation": return "翻译"
+        case "grammar": return "句子解析"
+        case "notes": return "短语与注释"
+        case "annotations": return "发音标注"
+        default: return kind
+        }
+    }
+
+    static func state(_ value: String?) -> String {
+        switch value {
+        case "checked": return "已人工核对"
+        case "partly": return "部分人工核对"
+        case "rule": return "规则生成，待核对"
+        default: return "程序生成，未经人工核对"
+        }
+    }
+}
+
