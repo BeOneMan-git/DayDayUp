@@ -29,6 +29,10 @@ final class Router {
     /// The learner closed the reader's side panel in a wide window. It then stays closed by default until they
     /// open it again (this run of the app only).
     var inspectorClosedByLearner = false
+    /// Width of the app's window (portrait, landscape, Split View). The reader's breakpoints use it, because the
+    /// design's three columns are navigation + text + side panel (SYS-P01): an open sidebar must not push a
+    /// landscape iPad down to the drawer layout.
+    var windowWidth: CGFloat = 0
     /// A text field or text view is being edited somewhere in the app (PLAT-09, ACC-24). While it is,
     /// single-key shortcuts (space, arrows, L) are off, so typing never starts playback or recording.
     private(set) var isEditingText = false

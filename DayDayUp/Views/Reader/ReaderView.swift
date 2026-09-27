@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Where the reader puts its side panel (word card, sentence notes, word list), from the width the reader really
-/// has (SYS-P01 / PLAT-05). The width comes from the view itself, so iPad portrait, Split View, Stage Manager windows
-/// and an open sidebar all count; the device model never does.
+/// Where the reader puts its side panel (word card, sentence notes, word list), from the width of the app's window
+/// (SYS-P01 / PLAT-05: 宽屏 = 导航 + 正文 + 检查器). iPad portrait, Split View and Stage Manager windows all count; the
+/// device model never does. An open sidebar does not count against it: on a landscape iPad the text keeps about
+/// 700 pt next to the side panel.
 enum ReaderLayout: Equatable {
     /// ≥ 1180 pt: text plus a side-panel column; the column is open unless the learner closed it.
     case wide
@@ -43,11 +44,14 @@ struct ReaderView: View {
     @State private var showQuiz = false
     @State private var width: CGFloat = 0
     @State private var measured = false
+    @State private var lastLayout: ReaderLayout?
 
     /// The text column with its ▷ margin: about 720 pt of English per line in wide windows (UI-P01).
     static let textColumnWidth: CGFloat = 770
 
-    private var layout: ReaderLayout { ReaderLayout(width: width) }
+    private var layout: ReaderLayout { ReaderLayout(width: layoutWidth) }
+    /// The window's width once RootView has measured it; the reader's own width before that.
+    private var layoutWidth: CGFloat { router.windowWidth > 0 ? router.windowWidth : width }
     private var focus: Bool { router.readerFocus }
 
     var body: some View {
@@ -118,6 +122,9 @@ struct ReaderView: View {
                 proxy.size.width
             } action: { newWidth in
                 widthChanged(newWidth)
+            }
+            .onChange(of: router.windowWidth) { _, _ in
+                if measured { applyLayout() }
             }
     }
 
@@ -209,12 +216,15 @@ struct ReaderView: View {
     /// Measured width → layout. The first measurement and every layout change reset the side panel to that
     /// layout's default: open in a wide window (unless the learner closed it), closed below 1180 pt until asked.
     private func widthChanged(_ newWidth: CGFloat) {
-        let old = ReaderLayout(width: width)
-        let first = !measured
         width = newWidth
         measured = true
-        let new = ReaderLayout(width: newWidth)
-        guard first || new != old, !focus else { return }
+        applyLayout()
+    }
+
+    private func applyLayout() {
+        let new = layout
+        guard new != lastLayout, !focus else { return }
+        lastLayout = new
         switch new {
         case .wide:
             session.showInspector = !router.inspectorClosedByLearner

@@ -43,6 +43,11 @@ struct RootView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .simultaneousGesture(TapGesture().onEnded { ActivityClock.shared.touch() })
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { newWidth in
+            router.windowWidth = newWidth
+        }
         .onChange(of: router.tab, initial: true) { _, tab in
             ActivityClock.shared.currentCategory = RootView.category(for: tab)
         }
