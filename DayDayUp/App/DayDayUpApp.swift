@@ -51,7 +51,7 @@ struct DayDayUpApp: App {
         _session = State(initialValue: session)
         _recorder = State(initialValue: recorder)
         _router = State(initialValue: Router())
-        DiagLog.shared.log("app", "launch \(BackupArchive.appVersionText()) packs=\(packs.packs.count)")
+        DiagLog.shared.log("app", "launch \(BackupArchive.appVersionText()) \(AppFlavor.bundleId) packs=\(packs.packs.count)")
     }
 
     var body: some Scene {

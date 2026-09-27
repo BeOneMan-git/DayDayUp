@@ -1,11 +1,14 @@
 # Builds DayDayUp on GitHub's macOS runner.
 # - dev branch: compile check only (no ipa, no release).
 # - main branch: unsigned DayDayUp.ipa, published as a release. AltServer signs it with your own Apple ID when it installs the app.
+# - test branch: the test build (bundle id com.daydayup.app.test, name "DDU测试", so it has its own data on the iPad),
+#   published as a pre-release DayDayUp-Test.ipa that is never marked latest; plus an iPad simulator smoke test
+#   whose screenshots (original demo content only) are attached to that pre-release.
 name: Build IPA
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, test]
   workflow_dispatch:
 
 permissions:
@@ -33,6 +36,18 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Choose flavor
+        run: |
+          if [ "$GITHUB_REF" = "refs/heads/test" ]; then
+            echo "BUNDLE_ID=com.daydayup.app.test" >> "$GITHUB_ENV"
+            echo "DISPLAY_NAME=DDU测试" >> "$GITHUB_ENV"
+            echo "IPA_NAME=DayDayUp-Test.ipa" >> "$GITHUB_ENV"
+          else
+            echo "BUNDLE_ID=com.daydayup.app" >> "$GITHUB_ENV"
+            echo "DISPLAY_NAME=DayDayUp" >> "$GITHUB_ENV"
+            echo "IPA_NAME=DayDayUp.ipa" >> "$GITHUB_ENV"
+          fi
+
       - name: Build (unsigned)
         run: |
           set -o pipefail
@@ -47,6 +62,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            APP_DISPLAY_NAME="$DISPLAY_NAME" \
             build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
 
@@ -92,27 +109,29 @@ jobs:
           if-no-files-found: ignore
 
       - name: Read app version
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'
         run: |
           VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "App version: $VERSION"
 
       - name: Package IPA
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'
         run: |
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
           echo "App: $APP"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$APP/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$APP/Info.plist"
           rm -rf Payload && mkdir Payload
           cp -R "$APP" Payload/
-          zip -qry DayDayUp.ipa Payload
-          ls -la DayDayUp.ipa
+          zip -qry "$IPA_NAME" Payload
+          ls -la "$IPA_NAME"
 
       - uses: actions/upload-artifact@v4
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'
         with:
-          name: DayDayUp-ipa
-          path: DayDayUp.ipa
+          name: ${{ env.IPA_NAME }}
+          path: ${{ env.IPA_NAME }}
 
       - name: Publish release
         if: github.ref == 'refs/heads/main'
@@ -124,3 +143,69 @@ jobs:
             DayDayUp ${{ env.APP_VERSION }}（未签名）。把 DayDayUp.ipa 下载到电脑的英文路径，再用 AltServer 的 Sideload .ipa 安装，见 docs/INSTALL.md。
           files: DayDayUp.ipa
           make_latest: true
+
+      - name: Publish test pre-release
+        if: github.ref == 'refs/heads/test'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-build-${{ github.run_number }}
+          name: DayDayUp ${{ env.APP_VERSION }} 测试版 · build ${{ github.run_number }}
+          body: |
+            测试版（未签名）：包名 com.daydayup.app.test，桌面名称“DDU测试”。它和正式版是两个 App，数据完全分开。只用于开发者自己的测试，不是正式发布。simulator-screens.zip 是 iPad 模拟器冒烟测试的截图（只用原创演示内容）。
+          files: DayDayUp-Test.ipa
+          prerelease: true
+          make_latest: false
+
+  simulator:
+    # iPad simulator smoke test (test branch only): a Debug simulator build with test hooks, an original demo
+    # content pack made on the runner, and screenshots of the main pages in several sizes, themes and text sizes.
+    if: github.ref == 'refs/heads/test'
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build for the iPad simulator
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project DayDayUp.xcodeproj \
+            -scheme DayDayUp \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath simbuild \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee sim-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" sim-build.log
+
+      - name: Make the demo content pack
+        run: python3 tools/demo_pack.py demo.ecopack
+
+      - name: Run on iPad simulators and take screenshots
+        run: bash tools/sim_screens.sh simbuild/Build/Products/Debug-iphonesimulator/DayDayUp.app demo.ecopack shots
+
+      - name: Pack screenshots
+        if: always()
+        run: |
+          mkdir -p shots
+          cp sim-build.log shots/ 2>/dev/null || true
+          zip -qry simulator-screens.zip shots
+          ls -la simulator-screens.zip
+
+      - name: Attach screenshots to the test pre-release
+        if: always()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-build-${{ github.run_number }}
+          files: simulator-screens.zip
+          prerelease: true
+          make_latest: false

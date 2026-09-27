@@ -348,6 +348,9 @@ struct SettingsView: View {
     private var aboutSection: some View {
         Section {
             LabeledContent("版本", value: BackupArchive.appVersionText())
+            if AppFlavor.isTest {
+                LabeledContent("这是测试版", value: AppFlavor.bundleId)
+            }
             LabeledContent("内容包格式", value: "ecopack 格式 1 和 2")
             NavigationLink {
                 UsageGuideView()

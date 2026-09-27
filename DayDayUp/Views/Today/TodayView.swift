@@ -68,6 +68,14 @@ struct TodayView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if AppFlavor.isTest {
+                Label("测试版：数据和正式版分开，随便测", systemImage: "wrench.and.screwdriver")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(Theme.warn)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .overlay(Capsule().strokeBorder(Theme.warn, lineWidth: 1))
+            }
             Text(Date().formatted(date: .complete, time: .omitted))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Plain-text diagnostic log in Caches/diag.log.
 /// There is no Mac and no debugger in this setup, so this file is how problems
@@ -20,6 +21,9 @@ final class DiagLog: @unchecked Sendable {
     }
 
     func log(_ category: String, _ message: String) {
+        // Also into the system log (stays on the iPad), so a connected computer can follow it live:
+        // pymobiledevice3 syslog live -m <app process name>.
+        Logger(subsystem: "com.daydayup", category: category).notice("\(message, privacy: .public)")
         let line = "\(stamp.string(from: Date())) [\(category)] \(message)\n"
         let url = self.url
         let maxBytes = self.maxBytes

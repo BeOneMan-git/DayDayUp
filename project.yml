@@ -11,6 +11,8 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.0.0"
+    # The test build (branch "test") overrides these two: its own bundle id = its own data, and another name.
+    APP_DISPLAY_NAME: DayDayUp
     CURRENT_PROJECT_VERSION: "2"
 targets:
   DayDayUp:
@@ -32,7 +34,7 @@ targets:
     info:
       path: DayDayUp/Info.plist
       properties:
-        CFBundleDisplayName: DayDayUp
+        CFBundleDisplayName: $(APP_DISPLAY_NAME)
         CFBundleDevelopmentRegion: zh-Hans
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
