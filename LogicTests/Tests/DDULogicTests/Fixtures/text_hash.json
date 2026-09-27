@@ -1,0 +1,27 @@
+[
+ {
+  "text": "On a visit to Egypt Xi Jinping called for a new security apparatus.",
+  "norm": "on a visit to egypt xi jinping called for a new security apparatus.",
+  "hash": "58863bf2db7b"
+ },
+ {
+  "text": "“It’s  a   test” — said   the man.",
+  "norm": "\"it's a test\" - said the man.",
+  "hash": "48a0198e6422"
+ },
+ {
+  "text": "  Mixed CASE and\ttabs\nnewlines  ",
+  "norm": "mixed case and tabs newlines",
+  "hash": "f6ee44d73f11"
+ },
+ {
+  "text": "Café prices rose 3.5% – again.",
+  "norm": "café prices rose 3.5% - again.",
+  "hash": "e471807d870d"
+ },
+ {
+  "text": "",
+  "norm": "",
+  "hash": "e3b0c44298fc"
+ }
+]

@@ -58,12 +58,28 @@ jobs:
           grep -n -E "error:" build.log | head -80 || true
           tail -n 60 build.log || true
 
+      - name: Logic tests (FSRS, queue, answer check, CSV, pack diff)
+        if: always()
+        run: |
+          set -o pipefail
+          mkdir -p LogicTests/Sources/DDULogic
+          cp DayDayUp/Logic/*.swift DayDayUp/Models/PackModels.swift LogicTests/Sources/DDULogic/
+          swift test --package-path LogicTests 2>&1 | tee logic-tests.log | grep -E "error:|failed|passed|Executed" | tail -60
+
+      - name: Show logic test failures
+        if: failure()
+        run: |
+          grep -E "error:|failed" logic-tests.log | head -15 | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
+          tail -n 80 logic-tests.log || true
+
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: build.log
+          path: |
+            build.log
+            logic-tests.log
           if-no-files-found: ignore
 
       - name: Read app version

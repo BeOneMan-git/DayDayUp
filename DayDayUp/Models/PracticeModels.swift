@@ -215,26 +215,3 @@ enum WritingStats {
         return count
     }
 }
-
-// MARK: - Lossy arrays
-
-/// Decodes anything (even null) without reading it, so the list moves past a bad item.
-private struct SkipItem: Decodable {
-    init(from decoder: Decoder) throws {}
-}
-
-extension KeyedDecodingContainer {
-    /// Decodes an array but drops items that fail, so one damaged record never loses the rest.
-    func lossyArray<T: Decodable>(_ type: T.Type, forKey key: Key) -> [T] {
-        guard var list = try? nestedUnkeyedContainer(forKey: key) else { return [] }
-        var out: [T] = []
-        while !list.isAtEnd {
-            if let value = try? list.decode(T.self) {
-                out.append(value)
-            } else if (try? list.decode(SkipItem.self)) == nil {
-                break
-            }
-        }
-        return out
-    }
-}

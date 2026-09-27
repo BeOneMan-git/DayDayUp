@@ -105,25 +105,3 @@ struct ReaderSettings: Codable, Equatable {
     static let loopGaps: [Double] = [0, 0.5, 1, 2, 3, 5]
     static let shadowRates: [Double] = [0.6, 0.75, 0.85, 1.0, 1.1, 1.25]
 }
-
-enum DayKey {
-    private static let formatter: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    static func of(_ date: Date) -> String { formatter.string(from: date) }
-    static var today: String { of(Date()) }
-
-    /// Keys for the last n days, oldest first.
-    static func lastDays(_ n: Int) -> [String] {
-        let cal = Calendar.current
-        let now = Date()
-        return (0..<n).reversed().compactMap { back in
-            cal.date(byAdding: .day, value: -back, to: now).map(of)
-        }
-    }
-}

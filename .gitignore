@@ -14,3 +14,7 @@ tools/
 # system
 .DS_Store
 Thumbs.db
+
+# LogicTests: sources are copied from DayDayUp/Logic by the CI
+LogicTests/Sources/
+LogicTests/.build/
