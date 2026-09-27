@@ -21,6 +21,7 @@ struct VocabView: View {
 
     @Environment(VocabStore.self) private var vocab
     @Environment(PackStore.self) private var packs
+    @Environment(Router.self) private var router
     @SceneStorage("vocab.page") private var pageRaw = Page.review.rawValue
 
     private var page: Binding<Page> {
@@ -63,6 +64,15 @@ struct VocabView: View {
             if !packs.lexiconReady && vocab.state.items.isEmpty {
                 ProgressView("正在载入词库…")
             }
+        }
+        .onAppear { takeReviewRequest() }
+        .onChange(of: router.vocabReviewRequestID) { _, _ in takeReviewRequest() }
+    }
+
+    /// 今日's 词汇 task opens this tab on 复习.
+    private func takeReviewRequest() {
+        if router.takeVocabReviewRequest() {
+            pageRaw = Page.review.rawValue
         }
     }
 }

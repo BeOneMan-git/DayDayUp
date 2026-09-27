@@ -79,6 +79,18 @@ final class PlanEngineTests: XCTestCase {
         XCTAssertEqual(shadow.first?.minutes, 15, "not doubled")
     }
 
+    func testDeferredRecallIsNotCarriedAsReading() {
+        var i = inputs()
+        let recall = PlanTask(id: "2026-09-26-recall", cat: .read, minutes: 5, title: "隔日回忆", reason: "",
+                              target: .articleCheck(issue: "x", id: "y", purpose: "delayed"), state: .deferred,
+                              doneAt: nil, deferredTo: "2026-09-27")
+        i.deferred = [recall]
+        let p = PlanEngine.build(i)
+        XCTAssertEqual(p.tasks.first { $0.id == "2026-09-27-read" }?.target, .article(issue: "2026-09-19", id: "sleep"))
+        XCTAssertEqual(PlanEngine.slot(recall), "recall")
+        XCTAssertEqual(Set(p.tasks.map(\.id)).count, p.tasks.count, "task ids stay unique")
+    }
+
     func testWeeklyCheckOncePerWeek() {
         var i = inputs()
         i.lastWeeklyCheck = "2026-09-25"

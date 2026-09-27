@@ -32,7 +32,7 @@ struct RootView: View {
                 NavigationStack { VocabView() }
             }
             Tab("进度", systemImage: "chart.line.uptrend.xyaxis", value: AppTab.progress) {
-                NavigationStack { ComingSoonView(feature: .progress) }
+                NavigationStack { StudyProgressPage() }
             }
             Tab("设置", systemImage: "gearshape", value: AppTab.settings) {
                 NavigationStack { SettingsView() }

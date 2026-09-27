@@ -7,9 +7,11 @@ struct ReaderView: View {
     @Environment(ReadingSession.self) private var session
     @Environment(UserStore.self) private var user
     @Environment(PackStore.self) private var packs
+    @Environment(StudyStore.self) private var study
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var lastUserScroll = Date.distantPast
     @State private var showSettings = false
+    @State private var showQuiz = false
 
     var body: some View {
         Group {
@@ -54,6 +56,7 @@ struct ReaderView: View {
                 }
                 .keyboardShortcut("i", modifiers: .command)
             }
+            studyToolbar
         }
         .inspector(isPresented: Bindable(session).showInspector) {
             InspectorPanel()
@@ -76,6 +79,9 @@ struct ReaderView: View {
                                                        gloss: nil, note: nil, origin: .reader))
                 }
             }
+        }
+        .sheet(isPresented: $showQuiz) {
+            ArticleQuizView(ref: ref, purpose: "practice")
         }
         .overlay(alignment: .top) {
             if let toast = session.toast {
@@ -182,6 +188,34 @@ struct ReaderView: View {
                 session.tapToken(i)
                 return .handled
             })
+        }
+    }
+
+    /// 理解题 come only with new-format content packs (format 2).
+    private var quizAvailable: Bool {
+        packs.resources(ref).quiz == .available
+    }
+
+    /// 理解题 (sheet) and 我的难度 (the learner's own 1–5 rating).
+    @ToolbarContentBuilder
+    private var studyToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                showQuiz = true
+            } label: {
+                Label("理解题", systemImage: "checklist")
+            }
+            .disabled(!quizAvailable)
+            .help(quizAvailable ? "做这篇的理解题" : "这篇还没有理解题")
+            .accessibilityHint(quizAvailable ? "打开这篇文章的理解题" : "这篇还没有理解题：导入新版内容包（格式 2）以后才有")
+            Menu {
+                ArticleDifficultyMenu(ref: ref)
+            } label: {
+                Label(ArticleDifficultyText.label(study.difficulty(ref)), systemImage: "chart.bar")
+                    .labelStyle(.titleAndIcon)
+            }
+            .help("我的难度：你自己觉得这篇有多难，用来排材料")
+            .accessibilityLabel("我的难度：" + ArticleDifficultyText.short(study.difficulty(ref)))
         }
     }
 

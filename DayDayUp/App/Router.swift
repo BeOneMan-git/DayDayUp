@@ -15,10 +15,13 @@ struct ShadowTarget: Equatable {
 @MainActor
 @Observable
 final class Router {
-    var tab: AppTab = .library
+    var tab: AppTab = .today
     var libraryPath: [ArticleRef] = []
     var shadowTarget: ShadowTarget?
     private(set) var shadowRequestID = 0
+    /// 今日 asked the 词汇 tab to show its 复习 page (V0.5).
+    private(set) var vocabReviewPending = false
+    private(set) var vocabReviewRequestID = 0
 
     func openArticle(_ ref: ArticleRef) {
         tab = .library
@@ -29,5 +32,19 @@ final class Router {
         shadowTarget = ShadowTarget(ref: ref, sid: sid)
         shadowRequestID += 1
         tab = .shadow
+    }
+
+    /// Opens 词汇 on its 复习 page.
+    func openVocabReview() {
+        vocabReviewPending = true
+        vocabReviewRequestID += 1
+        tab = .vocab
+    }
+
+    /// True once after `openVocabReview()`; the 词汇 page then switches to 复习.
+    func takeVocabReviewRequest() -> Bool {
+        guard vocabReviewPending else { return false }
+        vocabReviewPending = false
+        return true
     }
 }

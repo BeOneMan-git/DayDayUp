@@ -27,6 +27,14 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            Section("学习") {
+                NavigationLink {
+                    StudySettingsView()
+                } label: {
+                    Label("学习计划与提醒", systemImage: "calendar")
+                }
+            }
+
             Section("阅读") {
                 NavigationLink {
                     ReaderSettingsView()

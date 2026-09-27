@@ -208,6 +208,7 @@ struct QuizQuestion: Codable, Identifiable, Equatable, Sendable {
     var answer: Int
     var explain: String?
     var inSegment: Bool?       // answerable from the short passage alone
+    var sids: [Int]?           // sentences that support the answer (for "看原句")
 }
 
 struct QuizResult: Codable, Identifiable, Equatable, Sendable {

@@ -85,7 +85,7 @@ enum PlanEngine {
                                   title: "\(what)新题复测",
                                   reason: "\(DayKey.distance(from: DayKey.of(retest.created), to: i.day)) 天前的作品有了反馈或重写。今天换一道同类新题，看改进能不能迁移；和同题重写分开记录。",
                                   target: .retest(id: retest.id)))
-        } else if let deferredTask = i.deferred.first(where: { $0.cat == .output }) {
+        } else if let deferredTask = i.deferred.first(where: { slot($0) == "output" }) {
             tasks.append(carry(deferredTask, day: i.day))
         } else {
             let speakingDay = (DayKey.distance(from: "2026-01-01", to: i.day) % 2 == 0)
@@ -126,7 +126,7 @@ enum PlanEngine {
         // 听读: unfinished short material first; a hard one can be swapped.
         let readMinutes = minutes[.read] ?? 20
         var shadowRef: ReadingCandidate?
-        if let deferredTask = i.deferred.first(where: { $0.cat == .read }) {
+        if let deferredTask = i.deferred.first(where: { slot($0) == "read" }) {
             tasks.append(carry(deferredTask, day: i.day))
         } else if let pick = pickReading(i.reading) {
             shadowRef = pick
@@ -164,7 +164,7 @@ enum PlanEngine {
         }
 
         // 跟读: 1–2 short sentences from today's material (PLAN-P03).
-        if let deferredTask = i.deferred.first(where: { $0.cat == .shadow }) {
+        if let deferredTask = i.deferred.first(where: { slot($0) == "shadow" }) {
             tasks.append(carry(deferredTask, day: i.day))
         } else if let r = shadowRef ?? i.reading.first(where: { $0.firstUnpractisedSid != nil }) {
             tasks.append(PlanTask(id: "\(i.day)-shadow", cat: .shadow, minutes: minutes[.shadow] ?? 15,
@@ -196,14 +196,21 @@ enum PlanEngine {
     }
 
     /// A task put off yesterday comes back once, with its own reason; the day's total stays the same.
+    /// Only 听读, 跟读 and 说写 are carried; 基线, 回忆 and 每周复测 are planned again from the records.
     static func carry(_ t: PlanTask, day: String) -> PlanTask {
         var c = t
-        c.id = "\(day)-\(t.cat.rawValue)"
+        c.id = "\(day)-\(slot(t))"
         c.state = .todo
         c.doneAt = nil
         c.deferredTo = nil
         c.reason = "昨天暂缓的任务。" + t.reason
         return c
+    }
+
+    /// The part of a task id after its day key: "2026-09-27-read" -> "read".
+    static func slot(_ t: PlanTask) -> String {
+        let parts = t.id.split(separator: "-", maxSplits: 3)
+        return parts.count == 4 ? String(parts[3]) : t.cat.rawValue
     }
 
     /// Display order: 基线, 词汇, 听读, 跟读, 说写 (the plan keeps 说写 even when time is short).
