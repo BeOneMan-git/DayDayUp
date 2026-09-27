@@ -1,19 +1,18 @@
-# 用这个文件覆盖仓库里的 .github/workflows/build.yml（V0.2 起：发布标题带版本号）。
-# Replace .github/workflows/build.yml with this file (V0.2+: release title shows the app version).
-# Builds an unsigned DayDayUp.ipa on GitHub's macOS runner.
-# AltStore signs it with your own Apple ID when it installs the app.
+# Builds DayDayUp on GitHub's macOS runner.
+# - dev branch: compile check only (no ipa, no release).
+# - main branch: unsigned DayDayUp.ipa, published as a release. AltServer signs it with your own Apple ID when it installs the app.
 name: Build IPA
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: build-ipa
+  group: build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -68,12 +67,14 @@ jobs:
           if-no-files-found: ignore
 
       - name: Read app version
+        if: github.ref == 'refs/heads/main'
         run: |
           VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "App version: $VERSION"
 
       - name: Package IPA
+        if: github.ref == 'refs/heads/main'
         run: |
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
           echo "App: $APP"
@@ -83,11 +84,13 @@ jobs:
           ls -la DayDayUp.ipa
 
       - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main'
         with:
           name: DayDayUp-ipa
           path: DayDayUp.ipa
 
       - name: Publish release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
