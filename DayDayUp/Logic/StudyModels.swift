@@ -233,6 +233,7 @@ struct StudyState: Codable, Equatable {
     var quizResults: [QuizResult] = []
     var articleDifficulty: [String: Int] = [:]      // article key -> 1…5, the learner's own rating
     var articleOpened: [String: Date] = [:]         // first time an article was opened (接触)
+    var articleFinished: [String: Date] = [:]       // first time listening reached 90 % coverage (听读完成)
     var weeklyReports: [String: Date] = [:]         // week key (Monday) -> prepared
     var retractedIssues: [String] = []              // MET-06: issues the learner withdrew
     var lastPlanNote: String? = nil
@@ -241,7 +242,7 @@ struct StudyState: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case schema, settings, plans, baseline, retests, quizResults, articleDifficulty, articleOpened
-        case weeklyReports, retractedIssues, lastPlanNote
+        case articleFinished, weeklyReports, retractedIssues, lastPlanNote
     }
 
     init(from decoder: Decoder) throws {
@@ -254,6 +255,7 @@ struct StudyState: Codable, Equatable {
         quizResults = c.lossyArray(QuizResult.self, forKey: .quizResults)
         articleDifficulty = (try? c.decodeIfPresent([String: Int].self, forKey: .articleDifficulty)) ?? [:]
         articleOpened = (try? c.decodeIfPresent([String: Date].self, forKey: .articleOpened)) ?? [:]
+        articleFinished = (try? c.decodeIfPresent([String: Date].self, forKey: .articleFinished)) ?? [:]
         weeklyReports = (try? c.decodeIfPresent([String: Date].self, forKey: .weeklyReports)) ?? [:]
         retractedIssues = (try? c.decodeIfPresent([String].self, forKey: .retractedIssues)) ?? []
         lastPlanNote = try? c.decodeIfPresent(String.self, forKey: .lastPlanNote)

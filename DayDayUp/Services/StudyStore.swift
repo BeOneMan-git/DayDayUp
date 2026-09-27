@@ -269,6 +269,14 @@ final class StudyStore {
         update { $0.articleOpened[ref.key] = Date() }
     }
 
+    func noteFinished(_ ref: ArticleRef) {
+        guard state.articleFinished[ref.key] == nil else { return }
+        update { $0.articleFinished[ref.key] = Date() }
+    }
+
+    /// A retest the learner started from 今日; the next new work of that kind completes it.
+    @ObservationIgnored var activeRetest: String?
+
     func difficulty(_ ref: ArticleRef) -> Int? { state.articleDifficulty[ref.key] }
 
     func setDifficulty(_ ref: ArticleRef, _ value: Int?) {

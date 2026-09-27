@@ -206,6 +206,14 @@ final class PackStore {
         return file
     }
 
+    /// Comprehension questions of an article (quiz/<id>.json), nil when the pack has none.
+    func quizFile(_ ref: ArticleRef) -> QuizFile? {
+        guard let pack = pack(for: ref) else { return nil }
+        let url = pack.folder.appendingPathComponent("quiz/\(ref.id).json")
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(QuizFile.self, from: data)
+    }
+
     /// What this article can offer offline (PKG-P04): each resource is available, missing or not required.
     func resources(_ ref: ArticleRef) -> ArticleResources {
         if let cached = resourceCache[ref.key] { return cached }

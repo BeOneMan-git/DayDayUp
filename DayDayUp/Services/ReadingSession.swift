@@ -96,6 +96,10 @@ final class ReadingSession {
     @ObservationIgnored private var loopResume: Task<Void, Never>?
     /// Keys of words saved in the vocabulary (VocabStore); set by the app.
     @ObservationIgnored var vocabKeys: () -> Set<String> = { [] }
+    /// Called when listening coverage of the open article first reaches "完成" (IMP-F06); set by the app.
+    @ObservationIgnored var onFinished: ((ArticleRef) -> Void)?
+    /// Called when an article is opened (接触); set by the app.
+    @ObservationIgnored var onOpened: ((ArticleRef) -> Void)?
 
     // Listening progress, flushed to UserStore every 15 s
     @ObservationIgnored private var pendingSeconds: Double = 0
@@ -145,6 +149,7 @@ final class ReadingSession {
                             duration: art.dur, startAt: user.state.positions[newRef.key] ?? 0)
             }
             user.update { $0.lastArticle = newRef.key }
+            onOpened?(newRef)
             tick(engine.time)
         } catch {
             ref = newRef
@@ -636,6 +641,9 @@ final class ReadingSession {
                 s.heardText[key] = Array(Set(s.heardText[key] ?? []).union(textBuckets)).sorted()
             }
             s.positions[key] = position
+        }
+        if let art = article, user.state.listenProgress(key, duration: art.dur) >= 1 {
+            onFinished?(ref)
         }
     }
 }

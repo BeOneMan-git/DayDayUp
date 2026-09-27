@@ -12,6 +12,10 @@ final class PracticeStore {
     let fileURL: URL
     let recordingsDir: URL
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    /// A work got feedback or a rewrite: the app schedules a new-prompt retest (IEL-F04). (kind, work id)
+    @ObservationIgnored var onImproved: ((String, String) -> Void)?
+    /// A new speaking or writing work was started. (kind, work id)
+    @ObservationIgnored var onNewWork: ((String, String) -> Void)?
 
     init() {
         let fm = FileManager.default
@@ -113,14 +117,17 @@ final class PracticeStore {
 
     func addSpeaking(_ work: SpeakingWork) {
         update { $0.speaking.append(work) }
+        onNewWork?("speaking", work.id)
     }
 
     func updateSpeaking(_ id: String, _ change: (inout SpeakingWork) -> Void) {
+        let before = speaking(id)?.feedback.count ?? 0
         update { s in
             if let i = s.speaking.firstIndex(where: { $0.id == id }) {
                 change(&s.speaking[i])
             }
         }
+        if (speaking(id)?.feedback.count ?? 0) > before { onImproved?("speaking", id) }
     }
 
     /// True when any earlier answer to this prompt has revealed the reference.
@@ -140,14 +147,20 @@ final class PracticeStore {
 
     func addWriting(_ work: WritingWork) {
         update { $0.writing.append(work) }
+        onNewWork?("writing", work.id)
     }
 
     func updateWriting(_ id: String, _ change: (inout WritingWork) -> Void) {
+        let old = writing(id)
         update { s in
             if let i = s.writing.firstIndex(where: { $0.id == id }) {
                 change(&s.writing[i])
             }
         }
+        guard let old, let new = writing(id) else { return }
+        let rewritten = new.versions.filter { $0.finished != nil }.count > old.versions.filter { $0.finished != nil }.count
+            && new.versions.count > 1
+        if new.feedback.count > old.feedback.count || rewritten { onImproved?("writing", id) }
     }
 
     // MARK: 口语完整模拟

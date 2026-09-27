@@ -24,12 +24,29 @@ struct DayDayUpApp: App {
         packs.onArticlesChanged = { [weak vocab] diffs in vocab?.applyDiffs(diffs) }
         let session = ReadingSession(engine: engine, packs: packs, user: user)
         session.vocabKeys = { [weak vocab] in vocab?.savedKeys ?? [] }
+        let study = StudyStore()
+        let practice = PracticeStore()
         _packs = State(initialValue: packs)
         _user = State(initialValue: user)
-        _practice = State(initialValue: PracticeStore())
+        _practice = State(initialValue: practice)
         _vocab = State(initialValue: vocab)
         _annotations = State(initialValue: AnnotationStore())
-        _study = State(initialValue: StudyStore())
+        session.onOpened = { [weak study] ref in study?.noteOpened(ref) }
+        session.onFinished = { [weak study] ref in study?.noteFinished(ref) }
+        // IEL-F04: feedback or a rewrite schedules a new-prompt retest 3–7 days later.
+        practice.onImproved = { [weak study] kind, id in study?.scheduleRetest(kind: kind, sourceId: id) }
+        // A retest started from 今日 is completed by the next new work of the same kind.
+        practice.onNewWork = { [weak study, weak practice] kind, id in
+            guard let study, let practice, let rid = study.activeRetest, let r = study.retest(rid), r.kind == kind else { return }
+            study.activeRetest = nil
+            study.completeRetest(rid, resultId: id)
+            if kind == "speaking" {
+                practice.updateSpeaking(id) { $0.retestOf = r.sourceId }
+            } else {
+                practice.updateWriting(id) { $0.retestOf = r.sourceId }
+            }
+        }
+        _study = State(initialValue: study)
         _engine = State(initialValue: engine)
         _session = State(initialValue: session)
         _recorder = State(initialValue: recorder)
