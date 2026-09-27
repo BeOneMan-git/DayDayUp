@@ -203,7 +203,7 @@ jobs:
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
           test "$BUNDLE_ID" = com.daydayup.app.test
           EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")
-          lipo -verify_arch arm64 "$APP/$EXECUTABLE"
+          lipo "$APP/$EXECUTABLE" -verify_arch arm64
           ditto -c -k --sequesterRsrc --keepParent "$APP" DayDayUp-Test-Simulator.zip
           ls -lh DayDayUp-Test-Simulator.zip
 
