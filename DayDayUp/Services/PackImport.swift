@@ -65,7 +65,11 @@ struct PackChanges {
     /// "改动 3 篇、新增 1 篇" or "文章没有变化".
     var shortSummary: String {
         var parts: [String] = []
-        if !changed.isEmpty { parts.append("改动 \(changed.count) 篇") }
+        // A new file format (paragraph ids, sentence hashes) changes the file but not the text or the audio.
+        let real = changed.filter { !$0.sentencesSame || $0.audioChanged }
+        let formatOnly = changed.count - real.count
+        if !real.isEmpty { parts.append("改动 \(real.count) 篇") }
+        if formatOnly > 0 { parts.append("\(formatOnly) 篇只更新了文件格式（句子和原音不变）") }
         if !added.isEmpty { parts.append("新增 \(added.count) 篇") }
         if !removed.isEmpty { parts.append("删掉 \(removed.count) 篇") }
         return parts.isEmpty ? "文章没有变化" : parts.joined(separator: "、")

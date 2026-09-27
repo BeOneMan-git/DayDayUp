@@ -76,6 +76,10 @@ struct DayDayUpApp: App {
                 .task {
                     // Only finds waiting packs (the banner on 书架 and 设置 offers the preview).
                     await packs.scanInbox()
+                    #if DEBUG
+                    // CI simulator smoke test only (tools/sim_screens.sh); not in release or test builds.
+                    await DebugHooks.run(packs: packs, router: router)
+                    #endif
                 }
         }
         .onChange(of: scenePhase) { _, phase in
