@@ -1,7 +1,8 @@
 # Builds DayDayUp on GitHub's macOS runner.
 # - dev branch: compile check only (no ipa, no release).
 # - main branch: unsigned DayDayUp.ipa, published as a release. AltServer signs it with your own Apple ID when it installs the app.
-# - test branch: the test build (bundle id com.daydayup.app.test, name "DDU测试", so it has its own data on the iPad),
+# - test branch: the test build (bundle id com.daydayup.app.test, name "DDUTest", so it has its own data on the iPad;
+#   the name stays plain ASCII letters: AltServer refuses Chinese app names with "The name for this app is invalid"),
 #   published as a pre-release DayDayUp-Test.ipa that is never marked latest; plus an iPad simulator smoke test
 #   whose screenshots (original demo content only) are attached to that pre-release.
 name: Build IPA
@@ -40,7 +41,7 @@ jobs:
         run: |
           if [ "$GITHUB_REF" = "refs/heads/test" ]; then
             echo "BUNDLE_ID=com.daydayup.app.test" >> "$GITHUB_ENV"
-            echo "DISPLAY_NAME=DDU测试" >> "$GITHUB_ENV"
+            echo "DISPLAY_NAME=DDUTest" >> "$GITHUB_ENV"
             echo "IPA_NAME=DayDayUp-Test.ipa" >> "$GITHUB_ENV"
           else
             echo "BUNDLE_ID=com.daydayup.app" >> "$GITHUB_ENV"
@@ -151,7 +152,7 @@ jobs:
           tag_name: test-build-${{ github.run_number }}
           name: DayDayUp ${{ env.APP_VERSION }} 测试版 · build ${{ github.run_number }}
           body: |
-            测试版（未签名）：包名 com.daydayup.app.test，桌面名称“DDU测试”。它和正式版是两个 App，数据完全分开。只用于开发者自己的测试，不是正式发布。simulator-screens.zip 是 iPad 模拟器冒烟测试的截图（只用原创演示内容）。
+            测试版（未签名）：包名 com.daydayup.app.test，桌面名称“DDUTest”。它和正式版是两个 App，数据完全分开。只用于开发者自己的测试，不是正式发布。simulator-screens.zip 是 iPad 模拟器冒烟测试的截图（只用原创演示内容）。
           files: DayDayUp-Test.ipa
           prerelease: true
           make_latest: false
@@ -185,7 +186,7 @@ jobs:
             -derivedDataPath simbuild \
             CODE_SIGNING_ALLOWED=NO \
             PRODUCT_BUNDLE_IDENTIFIER=com.daydayup.app.test \
-            APP_DISPLAY_NAME="DDU测试" \
+            APP_DISPLAY_NAME="DDUTest" \
             build 2>&1 | tee sim-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" sim-build.log
 
