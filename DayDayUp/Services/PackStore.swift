@@ -169,6 +169,14 @@ final class PackStore {
         return try JSONDecoder().decode(Article.self, from: Data(contentsOf: url))
     }
 
+    /// The publication the pack names (format 2 sourceInfo, or the format-1 title "X · issue"); "" if unknown.
+    func publication(_ ref: ArticleRef) -> String {
+        guard let m = pack(for: ref)?.manifest else { return "" }
+        if let p = m.sourceInfo?["publication"], !p.isEmpty { return p }
+        let parts = m.title.components(separatedBy: " · ")
+        return parts.count > 1 ? parts[0] : ""
+    }
+
     func audioURL(_ ref: ArticleRef) -> URL? {
         guard let found = locate(ref) else { return nil }
         return found.folder.appendingPathComponent(found.meta.audio)

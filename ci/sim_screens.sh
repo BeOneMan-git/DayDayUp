@@ -1,7 +1,8 @@
 #!/bin/bash
 # iPad simulator smoke test for CI (GitHub macOS runner): installs the Debug simulator build, imports the
 # original demo pack (ci/demo_pack.py) through the Debug-only launch hooks (DayDayUp/App/DebugHooks.swift),
-# and takes screenshots of the main pages: landscape and portrait, light and dark, largest text size, iPad mini.
+# and takes screenshots of the main pages: portrait, dark, largest text size, landscape (when the Simulator app
+# can be rotated on the runner) and iPad mini.
 # Usage: ci/sim_screens.sh <path/to/DayDayUp.app> <demo.ecopack> <out dir>
 set -u
 APP="$1"
@@ -24,32 +25,39 @@ print(rs[-1]["identifier"] if rs else "")')
 log "runtime: $RUNTIME"
 xcrun simctl list devicetypes | grep -i ipad >> "$LOG" 2>&1
 
-devtype() {  # newest device type whose name contains $1
+devtypes() {  # every device type whose name contains $1, newest first
   xcrun simctl list devicetypes -j | python3 -c '
 import json, sys
 want = sys.argv[1]
-ts = [t for t in json.load(sys.stdin)["devicetypes"] if want in t["name"]]
-print(ts[-1]["identifier"] if ts else "")' "$1"
+ts = [t["identifier"] for t in json.load(sys.stdin)["devicetypes"] if want in t["name"]]
+print("\n".join(reversed(ts)))' "$1"
 }
 
 UDID=""
 DATA=""
 setup() {  # label, device type name part
-  local type
-  type=$(devtype "$2")
-  if [ -z "$RUNTIME" ] || [ -z "$type" ]; then
-    log "skip $1: no runtime or no device type for '$2'"
+  UDID=""
+  if [ -z "$RUNTIME" ]; then
+    log "skip $1: no iOS runtime"
     return 1
   fi
-  UDID=$(xcrun simctl create "$1" "$type" "$RUNTIME")
+  local type
+  for type in $(devtypes "$2"); do
+    UDID=$(xcrun simctl create "$1" "$type" "$RUNTIME" 2>> "$LOG") && break
+    UDID=""
+  done
+  if [ -z "$UDID" ]; then
+    log "skip $1: no device type for '$2' works with $RUNTIME"
+    return 1
+  fi
   log "created $1 ($type) $UDID"
   xcrun simctl boot "$UDID" >> "$LOG" 2>&1
-  xcrun simctl bootstatus "$UDID" -b >> "$LOG" 2>&1
+  xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1
   xcrun simctl install "$UDID" "$APP" >> "$LOG" 2>&1 || { log "install failed"; return 1; }
   DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
   mkdir -p "$DATA/Documents"
   cp "$PACK" "$DATA/Documents/"
-  log "data container: $DATA"
+  log "booted and installed"
   return 0
 }
 
@@ -70,7 +78,22 @@ shot() {  # file name, launch arguments...
     state="NOT RUNNING (crash?)"
   fi
   xcrun simctl io "$UDID" screenshot "$OUT/$name.png" >/dev/null 2>&1
-  log "$name: $state"
+  local size
+  size=$(sips -g pixelWidth -g pixelHeight "$OUT/$name.png" 2>/dev/null | awk '/pixel/ {printf "%s ", $2}')
+  log "$name: $state ($size)"
+}
+
+# The app supports every orientation and multitasking, so it cannot turn itself; the Simulator app can
+# (Device > Rotate, cmd-arrow) when the runner allows GUI scripting.
+rotate() {  # left / right
+  local key=124
+  [ "$1" = "left" ] && key=123
+  open -a Simulator --args -CurrentDeviceUDID "$UDID" >> "$LOG" 2>&1
+  sleep 6
+  osascript -e 'tell application "Simulator" to activate' -e 'delay 1' \
+    -e "tell application \"System Events\" to key code $key using {command down}" >> "$LOG" 2>&1 \
+    || log "rotate $1: GUI scripting not allowed on this runner"
+  sleep 3
 }
 
 finish() {  # label
@@ -81,42 +104,46 @@ finish() {  # label
 
 if setup DDU-Pro13 "iPad Pro 13-inch"; then
   ui appearance light
-  shot 00-import -DDUImportInbox 1 -DDUTab library -DDUOrientation landscape
-  shot 01-today-landscape -DDUTab today -DDUOrientation landscape
-  shot 02-library-landscape -DDUTab library -DDUOrientation landscape
-  shot 03-reader-landscape -DDUOpenArticle "$ARTICLE" -DDUOrientation landscape
-  shot 04-shadow-landscape -DDUTab shadow -DDUOrientation landscape
-  shot 05-vocab-landscape -DDUTab vocab -DDUOrientation landscape
-  shot 06-ielts-landscape -DDUTab ielts -DDUOrientation landscape
-  shot 07-progress-landscape -DDUTab progress -DDUOrientation landscape
-  shot 08-settings-landscape -DDUTab settings -DDUOrientation landscape
-  shot 10-reader-portrait -DDUOpenArticle "$ARTICLE" -DDUOrientation portrait
-  shot 11-today-portrait -DDUTab today -DDUOrientation portrait
+  shot 00-import -DDUImportInbox 1 -DDUTab library
+  shot 01-today -DDUTab today
+  shot 02-library -DDUTab library
+  shot 03-reader -DDUOpenArticle "$ARTICLE"
+  shot 04-shadow -DDUTab shadow
+  shot 05-vocab -DDUTab vocab
+  shot 06-ielts -DDUTab ielts
+  shot 07-progress -DDUTab progress
+  shot 08-settings -DDUTab settings
   ui appearance dark
-  shot 20-today-dark -DDUTab today -DDUOrientation landscape
-  shot 21-reader-dark -DDUOpenArticle "$ARTICLE" -DDUOrientation landscape
-  shot 22-progress-dark -DDUTab progress -DDUOrientation landscape
+  shot 20-today-dark -DDUTab today
+  shot 21-reader-dark -DDUOpenArticle "$ARTICLE"
+  shot 22-progress-dark -DDUTab progress
   ui appearance light
   ui content_size accessibility-extra-extra-extra-large
-  shot 30-today-largest-text -DDUTab today -DDUOrientation portrait
-  shot 31-reader-largest-text -DDUOpenArticle "$ARTICLE" -DDUOrientation portrait
-  shot 32-shadow-largest-text -DDUTab shadow -DDUOrientation portrait
-  shot 33-settings-largest-text -DDUTab settings -DDUOrientation portrait
+  shot 30-today-largest-text -DDUTab today
+  shot 31-reader-largest-text -DDUOpenArticle "$ARTICLE"
+  shot 32-shadow-largest-text -DDUTab shadow
+  shot 33-settings-largest-text -DDUTab settings
   ui content_size large
+  rotate right
+  shot 50-today-landscape -DDUTab today
+  shot 51-reader-landscape -DDUOpenArticle "$ARTICLE"
+  shot 52-shadow-landscape -DDUTab shadow
+  shot 53-library-landscape -DDUTab library
+  rotate left
   finish pro13
 fi
 
 if setup DDU-mini "iPad mini"; then
   ui appearance light
-  shot 40-mini-import -DDUImportInbox 1 -DDUTab library -DDUOrientation portrait
-  shot 41-mini-reader -DDUOpenArticle "$ARTICLE" -DDUOrientation portrait
-  shot 42-mini-today -DDUTab today -DDUOrientation portrait
-  shot 43-mini-library -DDUTab library -DDUOrientation portrait
+  shot 60-mini-import -DDUImportInbox 1 -DDUTab library
+  shot 61-mini-reader -DDUOpenArticle "$ARTICLE"
+  shot 62-mini-today -DDUTab today
+  shot 63-mini-shadow -DDUTab shadow
   finish mini
 fi
 
 mkdir -p "$OUT/crashes"
 cp ~/Library/Logs/DiagnosticReports/DayDayUp* "$OUT/crashes/" 2>/dev/null || true
 log "files: $(ls "$OUT" | tr '\n' ' ')"
-grep -c "NOT RUNNING" "$LOG" | xargs -I{} echo "launches that were not running: {}" | tee -a "$LOG"
+log "launches that were not running: $(grep -c 'NOT RUNNING' "$LOG")"
 exit 0

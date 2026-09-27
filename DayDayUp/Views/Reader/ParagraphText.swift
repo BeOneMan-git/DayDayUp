@@ -201,10 +201,11 @@ struct ArticleHeader: View {
     let article: Article
     let meta: ArticleMeta?
     let titleOn: Bool
+    var publication: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("The Economist · \(article.issue) · \(article.section)")
+            Text([publication, article.issue, article.section].filter { !$0.isEmpty }.joined(separator: " · "))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             if let fly = article.fly, !fly.isEmpty {

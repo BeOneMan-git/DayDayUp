@@ -467,7 +467,8 @@ struct ReaderView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
-                    ArticleHeader(article: art, meta: packs.item(ref)?.meta, titleOn: session.titleOn)
+                    ArticleHeader(article: art, meta: packs.item(ref)?.meta, titleOn: session.titleOn,
+                                  publication: packs.publication(ref))
                         .id(-1)
                     if session.blind {
                         BlindListeningView(position: blindPosition)

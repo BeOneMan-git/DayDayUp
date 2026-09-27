@@ -145,7 +145,8 @@ final class ReadingSession {
             sentenceInPanel = nil
             cancelChunkSelection()
             if let url = packs.audioURL(newRef) {
-                engine.load(url: url, title: art.title, album: "The Economist · \(art.issue)",
+                let album = [packs.publication(newRef), art.issue].filter { !$0.isEmpty }.joined(separator: " · ")
+                engine.load(url: url, title: art.title, album: album,
                             duration: art.dur, startAt: user.state.positions[newRef.key] ?? 0)
             }
             user.update { $0.lastArticle = newRef.key }

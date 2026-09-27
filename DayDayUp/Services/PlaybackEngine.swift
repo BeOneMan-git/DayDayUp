@@ -245,7 +245,7 @@ final class PlaybackEngine {
         guard hasAudio else { return }
         let info: [String: Any] = [
             MPMediaItemPropertyTitle: nowTitle,
-            MPMediaItemPropertyArtist: "The Economist",
+            MPMediaItemPropertyArtist: nowAlbum.components(separatedBy: " · ").first ?? "",
             MPMediaItemPropertyAlbumTitle: nowAlbum,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: time,
