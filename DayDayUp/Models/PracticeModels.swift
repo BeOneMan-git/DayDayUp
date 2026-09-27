@@ -11,11 +11,12 @@ struct PracticeState: Codable, Equatable {
     var speaking: [SpeakingWork] = []
     var writing: [WritingWork] = []
     var reports: [ContentReport] = []
+    var mocks: [MockSession] = []          // V0.4: full speaking mocks (IEL-P03)
 
     init() {}
 
     enum CodingKeys: String, CodingKey {
-        case schema, shadow, speaking, writing, reports
+        case schema, shadow, speaking, writing, reports, mocks
     }
 
     init(from decoder: Decoder) throws {
@@ -25,6 +26,7 @@ struct PracticeState: Codable, Equatable {
         speaking = c.lossyArray(SpeakingWork.self, forKey: .speaking)
         writing = c.lossyArray(WritingWork.self, forKey: .writing)
         reports = c.lossyArray(ContentReport.self, forKey: .reports)
+        mocks = c.lossyArray(MockSession.self, forKey: .mocks)
     }
 }
 
@@ -41,7 +43,17 @@ struct ShadowAttempt: Codable, Equatable, Identifiable {
     var silent: Bool
     var interrupted: Bool
     var rate: Double             // speed of the original when it was played
-    var mode: String             // "repeat" now; "shadow", "read", "retell" later
+    var mode: String             // ShadowMode raw value: "repeat", "shadow", "read", "retell"
+    // V0.4
+    var endSid: Int? = nil           // last sentence when the segment is longer than one sentence
+    var crosstalk: Bool? = nil       // recorded through the speaker while the original played (ACC-17)
+    var echoCancel: Bool? = nil      // echo-cancelled input was requested
+    var output: String? = nil        // where the sound went: 耳机 / 扬声器 …
+    var hints: [String]? = nil       // 脱稿复述: keywords the learner opened
+    var followUp: String? = nil      // 脱稿复述: the follow-up question
+    var followFile: String? = nil    // 脱稿复述: the recorded answer to it
+    var followSeconds: Double? = nil
+    var selfNote: String? = nil      // what the learner noticed afterwards
 }
 
 /// One spoken answer to a speaking prompt.
@@ -62,10 +74,16 @@ struct SpeakingWork: Codable, Equatable, Identifiable {
     var check: SelfCheck?
     var sawReference: Bool
     var feedback: [Feedback]
+    // V0.4: exam part, mock membership, preparation notes, whether it was a first try at a new prompt.
+    var part: String? = nil          // "basic", "p1", "p2", "p3"
+    var mockId: String? = nil
+    var notes: String? = nil
+    var retestOf: String? = nil      // V0.5: a new-prompt retest of this earlier work (IEL-F04)
 
     enum CodingKeys: String, CodingKey {
         case id, promptId, question, created, prepSeconds, speakSeconds, target, file
         case peakDb, silent, interrupted, independent, check, sawReference, feedback
+        case part, mockId, notes, retestOf
     }
 
     init(id: String, promptId: String, question: String, created: Date, prepSeconds: Double,
@@ -105,6 +123,10 @@ struct SpeakingWork: Codable, Equatable, Identifiable {
         check = try? c.decodeIfPresent(SelfCheck.self, forKey: .check)
         sawReference = try c.decodeIfPresent(Bool.self, forKey: .sawReference) ?? false
         feedback = c.lossyArray(Feedback.self, forKey: .feedback)
+        part = try? c.decodeIfPresent(String.self, forKey: .part)
+        mockId = try? c.decodeIfPresent(String.self, forKey: .mockId)
+        notes = try? c.decodeIfPresent(String.self, forKey: .notes)
+        retestOf = try? c.decodeIfPresent(String.self, forKey: .retestOf)
     }
 }
 
@@ -118,9 +140,15 @@ struct WritingWork: Codable, Equatable, Identifiable {
     var versions: [WritingVersion]
     var feedback: [Feedback]
     var sawReference: Bool
+    // V0.4: task type and its conditions (IEL-P05/P06).
+    var kind: String? = nil          // "basic", "task1", "task2"
+    var minWords: Int? = nil
+    var targetMinutes: Double? = nil
+    var retestOf: String? = nil      // V0.5: a new-prompt retest of this earlier work (IEL-F04)
 
     enum CodingKeys: String, CodingKey {
         case id, promptId, task, created, versions, feedback, sawReference
+        case kind, minWords, targetMinutes, retestOf
     }
 
     init(id: String, promptId: String, task: String, created: Date, versions: [WritingVersion]) {
@@ -142,6 +170,10 @@ struct WritingWork: Codable, Equatable, Identifiable {
         versions = c.lossyArray(WritingVersion.self, forKey: .versions)
         feedback = c.lossyArray(Feedback.self, forKey: .feedback)
         sawReference = try c.decodeIfPresent(Bool.self, forKey: .sawReference) ?? false
+        kind = try? c.decodeIfPresent(String.self, forKey: .kind)
+        minWords = try? c.decodeIfPresent(Int.self, forKey: .minWords)
+        targetMinutes = try? c.decodeIfPresent(Double.self, forKey: .targetMinutes)
+        retestOf = try? c.decodeIfPresent(String.self, forKey: .retestOf)
     }
 
     var latest: WritingVersion? { versions.last }
@@ -158,6 +190,48 @@ struct WritingVersion: Codable, Equatable, Identifiable {
     /// false = written after seeing the reference or feedback.
     var independent: Bool
     var check: SelfCheck?
+}
+
+/// One full speaking mock (IEL-P03): Part 1, Part 2 and Part 3 answers in order.
+/// An interruption means it does not count as a complete mock.
+struct MockSession: Codable, Equatable, Identifiable {
+    var id: String
+    var created: Date
+    var finished: Date?
+    var interrupted: Bool
+    var answers: [String]            // SpeakingWork ids, in order
+    var seconds: Double              // total time from start to end
+    var check: SelfCheck?
+    var feedback: [Feedback]
+
+    init(id: String, created: Date) {
+        self.id = id
+        self.created = created
+        self.finished = nil
+        self.interrupted = false
+        self.answers = []
+        self.seconds = 0
+        self.check = nil
+        self.feedback = []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, created, finished, interrupted, answers, seconds, check, feedback
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        created = (try? c.decodeIfPresent(Date.self, forKey: .created)) ?? Date(timeIntervalSince1970: 0)
+        finished = try? c.decodeIfPresent(Date.self, forKey: .finished)
+        interrupted = (try? c.decodeIfPresent(Bool.self, forKey: .interrupted)) ?? false
+        answers = (try? c.decodeIfPresent([String].self, forKey: .answers)) ?? []
+        seconds = (try? c.decodeIfPresent(Double.self, forKey: .seconds)) ?? 0
+        check = try? c.decodeIfPresent(SelfCheck.self, forKey: .check)
+        feedback = c.lossyArray(Feedback.self, forKey: .feedback)
+    }
+
+    var isComplete: Bool { finished != nil && !interrupted }
 }
 
 /// Self-assessment on the four IELTS criteria: ticks and evidence, no score.

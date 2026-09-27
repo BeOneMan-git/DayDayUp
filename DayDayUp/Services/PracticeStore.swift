@@ -150,6 +150,33 @@ final class PracticeStore {
         }
     }
 
+    // MARK: 口语完整模拟
+
+    func mock(_ id: String) -> MockSession? {
+        state.mocks.first { $0.id == id }
+    }
+
+    func addMock(_ mock: MockSession) {
+        update { $0.mocks.append(mock) }
+        saveNow()
+    }
+
+    func updateMock(_ id: String, _ change: (inout MockSession) -> Void) {
+        update { s in
+            if let i = s.mocks.firstIndex(where: { $0.id == id }) {
+                change(&s.mocks[i])
+            }
+        }
+    }
+
+    func updateShadow(_ id: String, _ change: (inout ShadowAttempt) -> Void) {
+        update { s in
+            if let i = s.shadow.firstIndex(where: { $0.id == id }) {
+                change(&s.shadow[i])
+            }
+        }
+    }
+
     // MARK: 报错
 
     func addReport(_ report: ContentReport) {

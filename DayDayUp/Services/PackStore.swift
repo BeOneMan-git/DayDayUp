@@ -61,6 +61,8 @@ final class PackStore {
     @ObservationIgnored var onArticlesChanged: (([ArticleDiff]) -> Void)?
     @ObservationIgnored private var articleCache: [String: Article] = [:]
     @ObservationIgnored private var cacheOrder: [String] = []
+    @ObservationIgnored private var annotationCache: [String: AnnotationFile?] = [:]
+    @ObservationIgnored private var resourceCache: [String: ArticleResources] = [:]
 
     init() {
         let fm = FileManager.default
@@ -112,6 +114,8 @@ final class PackStore {
         }
         articleCache = [:]
         cacheOrder = []
+        annotationCache = [:]
+        resourceCache = [:]
         loadLexicon()
     }
 
@@ -185,6 +189,52 @@ final class PackStore {
             articleCache[cacheOrder.removeFirst()] = nil
         }
         return a
+    }
+
+    /// Pronunciation annotations of an article (annotations/<id>.json), nil when the pack has none.
+    func annotationFile(_ ref: ArticleRef) -> AnnotationFile? {
+        if let cached = annotationCache[ref.key] { return cached }
+        var file: AnnotationFile?
+        if let pack = pack(for: ref) {
+            let url = pack.folder.appendingPathComponent("annotations/\(ref.id).json")
+            if let data = try? Data(contentsOf: url) {
+                file = try? JSONDecoder().decode(AnnotationFile.self, from: data)
+                if file == nil { DiagLog.shared.log("pack", "unreadable annotations for \(ref.key)") }
+            }
+        }
+        annotationCache[ref.key] = .some(file)
+        return file
+    }
+
+    /// What this article can offer offline (PKG-P04): each resource is available, missing or not required.
+    func resources(_ ref: ArticleRef) -> ArticleResources {
+        if let cached = resourceCache[ref.key] { return cached }
+        var r = ArticleResources()
+        guard let pack = pack(for: ref), let meta = pack.manifest.articles.first(where: { $0.id == ref.id }) else {
+            r.text = .missing
+            r.audio = .missing
+            r.timing = .missing
+            r.senses = .missing
+            return r
+        }
+        let fm = FileManager.default
+        func exists(_ name: String) -> Bool { fm.fileExists(atPath: pack.folder.appendingPathComponent(name).path) }
+        let deps = meta.deps ?? [:]
+        func state(_ key: String, file: String?) -> ResourceState {
+            if let file { return exists(file) ? .available : (deps[key] == "not-required" ? .notRequired : .missing) }
+            return ResourceState(rawValue: deps[key] ?? "") ?? .available
+        }
+        r.text = state("text", file: "articles/\(ref.id).json")
+        r.audio = state("audio", file: meta.audio)
+        r.timing = r.audio == .available ? state("timing", file: nil) : .missing
+        // Word sounds are cut from the original audio when there is a time line; otherwise the system voice is used.
+        r.wordAudio = r.timing == .available ? .available : (ResourceState(rawValue: deps["wordAudio"] ?? "") ?? .notRequired)
+        r.senses = state("senses", file: "lexicon.json")
+        r.annotations = state("annotations", file: "annotations/\(ref.id).json")
+        r.quiz = state("quiz", file: "quiz/\(ref.id).json")
+        r.pdf = ResourceState(rawValue: deps["pdf"] ?? "") ?? .notRequired
+        resourceCache[ref.key] = r
+        return r
     }
 
     func sentence(_ ref: ArticleRef, sid: Int) -> Sent? {
@@ -433,5 +483,37 @@ final class PackStore {
         let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
         let cleaned = String(s.map { allowed.contains($0) ? $0 : "_" })
         return cleaned.isEmpty || cleaned.hasPrefix(".") ? "pack_" + cleaned : cleaned
+    }
+}
+
+/// PKG-P04: what an article offers.
+enum ResourceState: String, Sendable {
+    case available
+    case missing
+    case notRequired = "not-required"
+
+    var mark: String {
+        switch self {
+        case .available: return "✓"
+        case .missing: return "缺"
+        case .notRequired: return "不需要"
+        }
+    }
+}
+
+struct ArticleResources: Equatable, Sendable {
+    var text: ResourceState = .available
+    var audio: ResourceState = .available
+    var timing: ResourceState = .available
+    var wordAudio: ResourceState = .notRequired
+    var senses: ResourceState = .available
+    var annotations: ResourceState = .missing
+    var quiz: ResourceState = .missing
+    var pdf: ResourceState = .notRequired
+
+    /// (label, state) in display order.
+    var list: [(String, ResourceState)] {
+        [("正文", text), ("原音", audio), ("时间轴", timing), ("词音", wordAudio), ("词义", senses),
+         ("标注", annotations), ("题目", quiz), ("PDF", pdf)]
     }
 }

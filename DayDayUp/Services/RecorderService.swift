@@ -25,6 +25,46 @@ enum AudioSessionControl {
         }
         try session.setActive(true)
     }
+
+    /// 影子跟读: record while the original plays. Asks the system for echo-cancelled input (iPadOS 18.2+),
+    /// which only helps on some hardware; returns whether the request was accepted.
+    @discardableResult
+    static func useShadowing() throws -> Bool {
+        try useRecording()
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setPrefersEchoCancelledInput(true)
+            return true
+        } catch {
+            DiagLog.shared.log("audio", "echo-cancelled input not available: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// Turns the echo-cancelled input request off again (other modes record the plain microphone).
+    static func endShadowing() {
+        try? AVAudioSession.sharedInstance().setPrefersEchoCancelledInput(false)
+    }
+
+    /// True when sound comes out of the iPad's own speaker, so the original can leak into the recording (ACC-17).
+    static var outputIsSpeaker: Bool {
+        AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .builtInSpeaker }
+    }
+
+    /// Output names, for the take record ("耳机", "扬声器" …).
+    static var outputText: String {
+        let outs = AVAudioSession.sharedInstance().currentRoute.outputs
+        if outs.isEmpty { return "未知" }
+        return outs.map { port -> String in
+            switch port.portType {
+            case .builtInSpeaker: return "扬声器"
+            case .headphones: return "有线耳机"
+            case .bluetoothA2DP, .bluetoothHFP, .bluetoothLE: return "蓝牙耳机"
+            case .airPlay: return "AirPlay"
+            default: return port.portName
+            }
+        }.joined(separator: "、")
+    }
 }
 
 struct RecordingResult: Equatable {

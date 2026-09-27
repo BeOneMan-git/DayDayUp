@@ -50,13 +50,22 @@ jobs:
             build 2>&1 | tee build.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" build.log
 
-      - name: Show errors
+      - name: Show errors (1-10)
         if: failure()
         run: |
-          # First errors become annotations, readable through the public API without a token.
-          grep -E "error:" build.log | head -10 | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
-          grep -n -E "error:" build.log | head -80 || true
-          tail -n 60 build.log || true
+          # Errors become annotations, readable through the public API without a token (max 10 per step).
+          grep -E "error:" build.log | awk '!seen[$0]++' > errors.txt || true
+          wc -l errors.txt || true
+          sed -n '1,10p' errors.txt | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
+          tail -n 40 build.log || true
+
+      - name: Show errors (11-20)
+        if: failure()
+        run: sed -n '11,20p' errors.txt | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
+
+      - name: Show errors (21-30)
+        if: failure()
+        run: sed -n '21,30p' errors.txt | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
 
       - name: Logic tests (FSRS, queue, answer check, CSV, pack diff)
         if: always()

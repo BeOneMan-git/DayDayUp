@@ -78,12 +78,15 @@ struct ReaderSettings: Codable, Equatable {
     var rate: Double = 1.0
     var loopGap: Double = 1.0      // pause between loop repeats (s), 0...5
     var shadowRate: Double = 0.85  // speed of the original in 跟读
+    var abGap: Double = 0.5        // SHD-P05: pause between original and recording in A/B (s), 0...2
+    var retellSeconds: Double = 60 // SHD-P06: 脱稿复述 time, 30...120
+    var shadowMode: String = "repeat"   // last 跟读 mode (ShadowMode raw value)
 
     init() {}
 
     enum CodingKeys: String, CodingKey {
         case fontStep, threshold, showTrap, showPhrase, pauseOnTap, follow, showZh, accent, rate
-        case loopGap, shadowRate
+        case loopGap, shadowRate, abGap, retellSeconds, shadowMode
     }
 
     init(from decoder: Decoder) throws {
@@ -99,9 +102,14 @@ struct ReaderSettings: Codable, Equatable {
         rate = try c.decodeIfPresent(Double.self, forKey: .rate) ?? 1.0
         loopGap = try c.decodeIfPresent(Double.self, forKey: .loopGap) ?? 1.0
         shadowRate = try c.decodeIfPresent(Double.self, forKey: .shadowRate) ?? 0.85
+        abGap = min(2, max(0, (try? c.decodeIfPresent(Double.self, forKey: .abGap)) ?? 0.5))
+        retellSeconds = min(120, max(30, (try? c.decodeIfPresent(Double.self, forKey: .retellSeconds)) ?? 60))
+        shadowMode = (try? c.decodeIfPresent(String.self, forKey: .shadowMode)) ?? "repeat"
     }
 
     static let rates: [Double] = [0.5, 0.6, 0.75, 0.85, 1.0, 1.1, 1.25, 1.5]
     static let loopGaps: [Double] = [0, 0.5, 1, 2, 3, 5]
-    static let shadowRates: [Double] = [0.6, 0.75, 0.85, 1.0, 1.1, 1.25]
+    static let shadowRates: [Double] = [0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2, 1.25]
+    static let abGaps: [Double] = [0, 0.25, 0.5, 1, 1.5, 2]
+    static let retellTimes: [Double] = [30, 45, 60, 90, 120]
 }

@@ -6,6 +6,7 @@ struct DayDayUpApp: App {
     @State private var user: UserStore
     @State private var practice: PracticeStore
     @State private var vocab: VocabStore
+    @State private var annotations: AnnotationStore
     @State private var engine: PlaybackEngine
     @State private var session: ReadingSession
     @State private var recorder: RecorderService
@@ -26,6 +27,7 @@ struct DayDayUpApp: App {
         _user = State(initialValue: user)
         _practice = State(initialValue: PracticeStore())
         _vocab = State(initialValue: vocab)
+        _annotations = State(initialValue: AnnotationStore())
         _engine = State(initialValue: engine)
         _session = State(initialValue: session)
         _recorder = State(initialValue: recorder)
@@ -40,6 +42,7 @@ struct DayDayUpApp: App {
                 .environment(user)
                 .environment(practice)
                 .environment(vocab)
+                .environment(annotations)
                 .environment(engine)
                 .environment(session)
                 .environment(recorder)
@@ -66,6 +69,7 @@ struct DayDayUpApp: App {
                 user.saveNow()
                 practice.saveNow()
                 vocab.saveNow()
+                annotations.saveNow()
             case .active:
                 recorder.refreshPermission()
                 vocab.noteDayStart()

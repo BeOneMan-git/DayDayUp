@@ -207,6 +207,7 @@ enum BackupArchive {
             }
         }
         var referenced = Set(practice.shadow.compactMap { $0.file } + practice.speaking.compactMap { $0.file })
+        referenced.formUnion(practice.shadow.compactMap { $0.followFile })
         referenced.formUnion(contents.vocabEvents.compactMap { $0.evidence }.filter { $0.hasSuffix(".m4a") })
         contents.missingRecordings = referenced.subtracting(recordings.keys).count
         return contents

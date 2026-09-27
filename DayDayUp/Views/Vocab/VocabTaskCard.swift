@@ -377,8 +377,24 @@ struct VocabTaskCard: View {
             }
             .disabled(locked)
             .accessibilityLabel("你的句子")
-        if locked {
+        if revealedEarly {
             referenceBlock(item)
+        } else if wroteDone {
+            // Self-rating first, then the reference (IEL-F03 order: 先自评，再看参考).
+            if submitted {
+                referenceBlock(item)
+                Button {
+                    onAnswered()
+                } label: {
+                    Label("下一张", systemImage: "arrow.right")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Text("先按自己写的句子自评，评完再看参考例句。")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         } else {
             FlowLayout(spacing: 10, lineSpacing: 10) {
                 Button {
@@ -1004,6 +1020,9 @@ struct VocabTaskCard: View {
             details.answer = sentence.isEmpty ? nil : sentence
         }
         vocab.answer(cardId: card.id, rating: rating, details: details)
+        if card.task == .produce && wroteDone && !revealedEarly {
+            return      // the reference shows now; 下一张 moves on
+        }
         onAnswered()
     }
 
