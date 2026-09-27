@@ -2,7 +2,7 @@
 import SwiftUI
 import UIKit
 
-/// Launch arguments for the iPad simulator smoke test in CI (tools/sim_screens.sh). Debug builds only:
+/// Launch arguments for the iPad simulator smoke test in CI (ci/sim_screens.sh). Debug builds only:
 /// the release and test builds that go onto the iPad never contain this file's code.
 ///   -DDUImportInbox 1          import every .ecopack waiting in Documents, without the preview
 ///   -DDUTab <name>             today / library / shadow / ielts / vocab / progress / settings

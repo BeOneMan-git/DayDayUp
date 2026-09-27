@@ -188,16 +188,20 @@ jobs:
           grep -q "BUILD SUCCEEDED" sim-build.log
 
       - name: Make the demo content pack
-        run: python3 tools/demo_pack.py demo.ecopack
+        run: |
+          set -o pipefail
+          python3 --version
+          python3 ci/demo_pack.py demo.ecopack 2>&1 | tee demo-pack.log
 
       - name: Run on iPad simulators and take screenshots
-        run: bash tools/sim_screens.sh simbuild/Build/Products/Debug-iphonesimulator/DayDayUp.app demo.ecopack shots
+        run: bash ci/sim_screens.sh simbuild/Build/Products/Debug-iphonesimulator/DayDayUp.app demo.ecopack shots
 
       - name: Pack screenshots
         if: always()
         run: |
           mkdir -p shots
           cp sim-build.log shots/ 2>/dev/null || true
+          cp demo-pack.log shots/ 2>/dev/null || true
           zip -qry simulator-screens.zip shots
           ls -la simulator-screens.zip
 
