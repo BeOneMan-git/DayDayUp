@@ -1,5 +1,5 @@
-# 把这个文件放到仓库里的 .github/workflows/build.yml（在 GitHub 网页上新建文件并粘贴全部内容）。
-# Put this file at .github/workflows/build.yml in the repository.
+# 用这个文件覆盖仓库里的 .github/workflows/build.yml（V0.2 起：发布标题带版本号）。
+# Replace .github/workflows/build.yml with this file (V0.2+: release title shows the app version).
 # Builds an unsigned DayDayUp.ipa on GitHub's macOS runner.
 # AltStore signs it with your own Apple ID when it installs the app.
 name: Build IPA
@@ -67,6 +67,12 @@ jobs:
           path: build.log
           if-no-files-found: ignore
 
+      - name: Read app version
+        run: |
+          VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "App version: $VERSION"
+
       - name: Package IPA
         run: |
           APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n 1)
@@ -85,8 +91,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: DayDayUp 0.1 · build ${{ github.run_number }}
+          name: DayDayUp ${{ env.APP_VERSION }} · build ${{ github.run_number }}
           body: |
-            V0.1 听读版。在 iPad 上用 Safari 下载 DayDayUp.ipa，再在 AltStore 里点“+”安装。
+            DayDayUp ${{ env.APP_VERSION }}（未签名）。把 DayDayUp.ipa 下载到电脑的英文路径，再用 AltServer 的 Sideload .ipa 安装，见 docs/INSTALL.md。
           files: DayDayUp.ipa
           make_latest: true

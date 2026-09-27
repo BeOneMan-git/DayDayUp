@@ -26,6 +26,7 @@ struct ParagraphView: View, Equatable {
     let highlight: ParagraphHighlight
     let style: ParagraphStyle
     let session: ReadingSession      // used for word marks only (not observed here)
+    @State private var zhOpen = false  // this paragraph's translation, when 中文 is off
 
     static func == (a: ParagraphView, b: ParagraphView) -> Bool {
         a.index == b.index && a.highlight == b.highlight && a.style == b.style
@@ -82,13 +83,28 @@ struct ParagraphView: View, Equatable {
 
     @ViewBuilder
     private var translation: some View {
-        if style.showZh {
+        if style.showZh || zhOpen {
             Text(translationText)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .lineSpacing(4)
                 .textSelection(.enabled)
         }
+        if !style.showZh && hasTranslation {
+            Button {
+                zhOpen.toggle()
+            } label: {
+                Label(zhOpen ? "收起译文" : "译文", systemImage: "character.bubble")
+                    .font(.caption)
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(zhOpen ? "收起本段译文" : "展开本段译文")
+        }
+    }
+
+    private var hasTranslation: Bool {
+        para.sents.contains { !($0.zh ?? "").isEmpty }
     }
 
     private var translationText: AttributedString {

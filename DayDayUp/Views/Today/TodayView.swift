@@ -1,11 +1,12 @@
 import SwiftUI
 import Charts
 
-/// 今日: continue where you stopped, this week's listening, backup reminder.
-/// The full daily plan (听读 → 跟读 → 背词 → 复盘) arrives in V0.4.
+/// 今日: continue where you stopped, today's practice, this week's listening, backup reminder.
+/// The full daily plan arrives in V0.5.
 struct TodayView: View {
     @Environment(PackStore.self) private var packs
     @Environment(UserStore.self) private var user
+    @Environment(PracticeStore.self) private var practice
     @Environment(Router.self) private var router
     @Environment(ReadingSession.self) private var session
     @Environment(PlaybackEngine.self) private var engine
@@ -30,6 +31,7 @@ struct TodayView: View {
                     nowPlaying(art)
                 }
                 continueCard
+                practiceCard
                 weekCard
                 planCard
             }
@@ -166,10 +168,41 @@ struct TodayView: View {
         .background(Theme.chip.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
     }
 
+    private var practiceCard: some View {
+        let today = practice.summary(for: DayKey.today)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("今日练习").font(.headline)
+                Spacer()
+                Text("跟读 \(today.shadowSentences) 句（\(today.shadowTakes) 次）· 口语 \(today.speaking) 次 · 写作 \(today.writing) 篇")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Text("每天一个小闭环：听读一段 → 跟读 1–2 句 → 口语 1 题 → 写作 1 题 → 每周备份一次。")
+                .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Button {
+                    router.tab = .shadow
+                } label: {
+                    Label("去跟读", systemImage: "waveform")
+                }
+                Button {
+                    router.tab = .ielts
+                } label: {
+                    Label("去练说写", systemImage: "text.bubble")
+                }
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.chip.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
+    }
+
     private var planCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("今日计划（V0.4 上线）").font(.headline)
-            Text("以后这里每天给你排好：听读 15 分钟 → 跟读 15 分钟 → 背词 12 分钟 → 复盘 3 分钟。现在先用书架和听读页。")
+            Text("今日计划（V0.5 上线）").font(.headline)
+            Text("以后这里会按你每天 60 或 90 分钟，排好听读、跟读、词汇和说写四类任务，并说明为什么这样排。")
                 .foregroundStyle(.secondary)
         }
         .padding(16)

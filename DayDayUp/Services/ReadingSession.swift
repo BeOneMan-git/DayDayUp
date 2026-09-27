@@ -28,6 +28,12 @@ struct WordMark: Equatable {
     var phrase = false
 }
 
+/// A–B loop between two sentences (inclusive).
+struct ABLoop: Equatable {
+    var startSid: Int
+    var endSid: Int
+}
+
 struct VocabRow: Identifiable, Hashable {
     let key: String
     let band: Int
@@ -53,6 +59,8 @@ final class ReadingSession {
 
     // Modes and selection
     private(set) var loopSid: Int?
+    private(set) var abStartSid: Int?          // A point chosen, waiting for B
+    private(set) var abLoop: ABLoop?
     private(set) var stepMode = false
     var blind = false
     var selectedTok: Int?
@@ -79,6 +87,7 @@ final class ReadingSession {
     @ObservationIgnored private var starred: Set<String> = []
     @ObservationIgnored private var stepTarget: Double?
     @ObservationIgnored private var isLoopSeeking = false
+    @ObservationIgnored private var loopResume: Task<Void, Never>?
 
     // Listening progress, flushed to UserStore every 15 s
     @ObservationIgnored private var pendingSeconds: Double = 0
@@ -116,6 +125,9 @@ final class ReadingSession {
             curSent = nil
             titleOn = false
             loopSid = nil
+            abStartSid = nil
+            abLoop = nil
+            cancelLoopResume()
             stepTarget = nil
             selectedTok = nil
             sentenceInPanel = nil
@@ -230,13 +242,12 @@ final class ReadingSession {
         if newSent != curSent { curSent = newSent }
         if newTitle != titleOn { titleOn = newTitle }
 
-        // Sentence loop and step-by-step pause.
-        if let ls = loopSid, let s = sents[ls], let start = s.s, let end = s.e {
+        // Sentence loop, A–B loop and step-by-step pause.
+        if let range = activeLoopRange() {
             // seek() calls tick() again at once; the flag stops a loop on very short sentences.
-            if engine.isPlaying && !isLoopSeeking && (t >= end - 0.03 || t < start - 0.5) {
-                isLoopSeeking = true
-                engine.seek(to: start)
-                isLoopSeeking = false
+            if engine.isPlaying && !isLoopSeeking && loopResume == nil
+                && (t >= range.end - 0.03 || t < range.start - 0.5) {
+                restartLoop(at: range.start)
             }
         } else if stepMode && engine.isPlaying {
             if stepTarget == nil { stepTarget = nextSentenceEnd(after: t) }
@@ -253,6 +264,46 @@ final class ReadingSession {
 
     private func nextSentenceEnd(after t: Double) -> Double? {
         order.first { ($0.e ?? 0) > t + 0.1 }?.e
+    }
+
+    /// Start and end time of the loop that is on, if any.
+    private func activeLoopRange() -> (start: Double, end: Double)? {
+        if let ls = loopSid, let s = sents[ls], let start = s.s, let end = s.e {
+            return (start, end)
+        }
+        if let ab = abLoop, let a = sents[ab.startSid]?.s, let b = sents[ab.endSid]?.e, b > a {
+            return (a, b)
+        }
+        return nil
+    }
+
+    /// Back to the loop start, after the pause set in 阅读设置 (循环间隔).
+    private func restartLoop(at start: Double) {
+        let gap = user.settings.loopGap
+        if gap < 0.05 {
+            isLoopSeeking = true
+            engine.seek(to: start)
+            isLoopSeeking = false
+            return
+        }
+        engine.pause()
+        let mark = engine.pauseCount
+        loopResume = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(gap * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.loopResume = nil
+            // Someone else paused during the gap (跟读, 口语, headphones): stay paused.
+            guard self.engine.pauseCount == mark, self.loopSid != nil || self.abLoop != nil else { return }
+            self.isLoopSeeking = true
+            self.engine.seek(to: start)
+            self.isLoopSeeking = false
+            self.engine.play()
+        }
+    }
+
+    private func cancelLoopResume() {
+        loopResume?.cancel()
+        loopResume = nil
     }
 
     /// Index of the last element whose start <= t, or -1.
@@ -275,6 +326,7 @@ final class ReadingSession {
     // MARK: Transport
 
     func togglePlay() {
+        cancelLoopResume()
         if engine.isPlaying {
             engine.pause()
             flushProgress()
@@ -287,6 +339,7 @@ final class ReadingSession {
 
     func playSentence(_ sid: Int, autoplay: Bool = true) {
         guard let s = sents[sid], let start = s.s else { return }
+        cancelLoopResume()
         if loopSid != nil { loopSid = sid }
         stepTarget = nil
         engine.seek(to: max(0, start - 0.05))
@@ -311,11 +364,14 @@ final class ReadingSession {
     }
 
     func toggleLoop() {
+        cancelLoopResume()
         if loopSid != nil {
             loopSid = nil
             showToast("单句循环：关")
             return
         }
+        abStartSid = nil
+        abLoop = nil
         let fromSelection = selectedTok.flatMap { toks[$0]?.sid }
         guard let sid = curSent ?? fromSelection ?? order.first?.id else { return }
         loopSid = sid
@@ -324,6 +380,8 @@ final class ReadingSession {
     }
 
     func loopSentence(_ sid: Int) {
+        abStartSid = nil
+        abLoop = nil
         loopSid = sid
         playSentence(sid)
         showToast("循环本句：再点“单句循环”关闭")
@@ -333,6 +391,37 @@ final class ReadingSession {
         stepMode.toggle()
         stepTarget = nil
         showToast(stepMode ? "逐句暂停：开" : "逐句暂停：关")
+    }
+
+    /// A–B loop in three taps: set A (current sentence), set B, then off.
+    func tapAB() {
+        cancelLoopResume()
+        if abLoop != nil {
+            abLoop = nil
+            abStartSid = nil
+            showToast("A–B 循环：关")
+            return
+        }
+        let fromSelection = selectedTok.flatMap { toks[$0]?.sid }
+        guard let sid = curSent ?? fromSelection ?? order.first?.id else { return }
+        guard let a = abStartSid else {
+            abStartSid = sid
+            showToast("A 点：第 \(position(of: sid)) 句。播到结束的那句，再点一次设 B 点")
+            return
+        }
+        var start = a
+        var end = sid
+        if position(of: end) < position(of: start) { swap(&start, &end) }
+        loopSid = nil
+        abStartSid = nil
+        abLoop = ABLoop(startSid: start, endSid: end)
+        showToast("A–B 循环：第 \(position(of: start))–\(position(of: end)) 句")
+        if !engine.isPlaying { playSentence(start) }
+    }
+
+    var abState: Int {
+        if abLoop != nil { return 2 }
+        return abStartSid == nil ? 0 : 1
     }
 
     func setRate(_ rate: Double) {

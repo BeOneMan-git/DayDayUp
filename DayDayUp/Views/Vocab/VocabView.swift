@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 词汇 (V0.1): the 生词本 and the words marked 认识. FSRS review arrives in V0.2.
+/// 词汇 (V0.1): the 生词本 and the words marked 认识. FSRS review arrives in V0.3.
 struct VocabView: View {
     @Environment(PackStore.self) private var packs
     @Environment(UserStore.self) private var user
@@ -28,7 +28,7 @@ struct VocabView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                Label("间隔重复复习（FSRS）V0.2 上线：生词本里的词会自动排进复习队列。", systemImage: "calendar.badge.clock")
+                Label("间隔重复复习（FSRS）V0.3 上线：生词本里的词会自动排进复习队列。", systemImage: "calendar.badge.clock")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

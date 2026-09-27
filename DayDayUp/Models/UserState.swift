@@ -76,11 +76,14 @@ struct ReaderSettings: Codable, Equatable {
     var showZh: Bool = false
     var accent: String = "en-GB"   // TTS voice
     var rate: Double = 1.0
+    var loopGap: Double = 1.0      // pause between loop repeats (s), 0...5
+    var shadowRate: Double = 0.85  // speed of the original in 跟读
 
     init() {}
 
     enum CodingKeys: String, CodingKey {
         case fontStep, threshold, showTrap, showPhrase, pauseOnTap, follow, showZh, accent, rate
+        case loopGap, shadowRate
     }
 
     init(from decoder: Decoder) throws {
@@ -94,9 +97,13 @@ struct ReaderSettings: Codable, Equatable {
         showZh = try c.decodeIfPresent(Bool.self, forKey: .showZh) ?? false
         accent = try c.decodeIfPresent(String.self, forKey: .accent) ?? "en-GB"
         rate = try c.decodeIfPresent(Double.self, forKey: .rate) ?? 1.0
+        loopGap = try c.decodeIfPresent(Double.self, forKey: .loopGap) ?? 1.0
+        shadowRate = try c.decodeIfPresent(Double.self, forKey: .shadowRate) ?? 0.85
     }
 
-    static let rates: [Double] = [0.75, 0.85, 1.0, 1.1, 1.25]
+    static let rates: [Double] = [0.5, 0.6, 0.75, 0.85, 1.0, 1.1, 1.25, 1.5]
+    static let loopGaps: [Double] = [0, 0.5, 1, 2, 3, 5]
+    static let shadowRates: [Double] = [0.6, 0.75, 0.85, 1.0, 1.1, 1.25]
 }
 
 enum DayKey {

@@ -185,10 +185,12 @@ final class PackStore {
                 ? "已导入 \(manifest.issue) 期\(part)，\(manifest.articles.count) 篇"
                 : "已是最新：\(manifest.issue) 期\(part)"
             lastMessage = message
+            DiagLog.shared.log("pack", message)
             return message
         } catch {
             let message = "导入失败：\(url.lastPathComponent)。\(error.localizedDescription)"
             lastMessage = message
+            DiagLog.shared.log("pack", message)
             return message
         }
     }

@@ -5,7 +5,14 @@ struct PlayerBar: View {
     @Environment(PlaybackEngine.self) private var engine
     @Environment(ReadingSession.self) private var session
     @Environment(UserStore.self) private var user
+    @Environment(Router.self) private var router
     @State private var scrubValue: Double?
+
+    /// Single-key shortcuts only while the library tab is showing,
+    /// so typing in 写作 or a text field never starts playback (PLAT-09).
+    private func key(_ k: KeyEquivalent) -> KeyboardShortcut? {
+        router.tab == .library ? KeyboardShortcut(k, modifiers: []) : nil
+    }
 
     var body: some View {
         VStack(spacing: 4) {
@@ -35,15 +42,16 @@ struct PlayerBar: View {
                 Spacer(minLength: 8)
                 iconButton("gobackward.5", "后退 5 秒") { engine.skip(-5) }
                 iconButton("backward.end.fill", "上一句") { session.moveSentence(-1) }
-                    .keyboardShortcut(.leftArrow, modifiers: [])
+                    .keyboardShortcut(key(.leftArrow))
                 playButton
-                    .keyboardShortcut(.space, modifiers: [])
+                    .keyboardShortcut(key(.space))
                 iconButton("forward.end.fill", "下一句") { session.moveSentence(1) }
-                    .keyboardShortcut(.rightArrow, modifiers: [])
+                    .keyboardShortcut(key(.rightArrow))
                 iconButton("goforward.5", "前进 5 秒") { engine.skip(5) }
                 Spacer(minLength: 8)
                 toggleButton("repeat.1", "单句循环", isOn: session.loopSid != nil) { session.toggleLoop() }
-                    .keyboardShortcut("l", modifiers: [])
+                    .keyboardShortcut(key("l"))
+                abButton
                 toggleButton("pause.rectangle", "逐句暂停", isOn: session.stepMode) { session.toggleStepMode() }
                 toggleButton("scroll", "自动跟随", isOn: user.settings.follow) {
                     user.updateSettings { $0.follow.toggle() }
@@ -58,6 +66,25 @@ struct PlayerBar: View {
         .padding(.top, 8)
         .padding(.bottom, 6)
         .background(.bar)
+    }
+
+    /// A–B loop: first tap sets A, second sets B, third turns it off.
+    private var abButton: some View {
+        let state = session.abState
+        return Button {
+            session.tapAB()
+        } label: {
+            Text(state == 0 ? "A–B" : (state == 1 ? "A–?" : "A–B"))
+                .font(.callout.weight(.semibold).monospacedDigit())
+                .foregroundStyle(state == 0 ? Color.secondary : Theme.accent)
+                .frame(width: 52, height: 44)
+                .background(state == 0 ? Color.clear : Theme.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("A–B 循环")
+        .accessibilityValue(state == 0 ? "关" : (state == 1 ? "已设 A 点" : "开"))
+        .help("A–B 循环：点一次设 A，再点一次设 B，第三次关闭")
     }
 
     private var counterText: String {

@@ -277,6 +277,7 @@ struct SentenceBox: View {
 
 struct SentenceButtons: View {
     @Environment(ReadingSession.self) private var session
+    @Environment(Router.self) private var router
     let sid: Int
     var showAnalysis = false
 
@@ -293,6 +294,14 @@ struct SentenceButtons: View {
                     session.loopSentence(sid)
                 } label: {
                     Label("循环本句", systemImage: "repeat.1")
+                }
+                Button {
+                    if let ref = session.ref {
+                        session.engine.pause()
+                        router.openShadow(ref, sid: sid)
+                    }
+                } label: {
+                    Label("跟读", systemImage: "waveform")
                 }
             }
             if showAnalysis {
@@ -313,6 +322,8 @@ struct SentenceButtons: View {
 struct SentencePanel: View {
     @Environment(ReadingSession.self) private var session
     @Environment(PackStore.self) private var packs
+    @Environment(PracticeStore.self) private var practice
+    @State private var reportSid: Int?
 
     var body: some View {
         let sid = session.sentenceInPanel ?? session.curSent ?? session.order.first?.id
@@ -340,10 +351,26 @@ struct SentencePanel: View {
                     Text(zh).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 SentenceButtons(sid: s.id)
+                Button {
+                    reportSid = s.id
+                } label: {
+                    Label("报错", systemImage: "exclamationmark.bubble")
+                }
+                .buttonStyle(.borderless)
+                .font(.callout)
+                .foregroundStyle(.secondary)
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.chip.opacity(0.6), in: RoundedRectangle(cornerRadius: 10))
+            .sheet(isPresented: Binding(get: { reportSid != nil }, set: { if !$0 { reportSid = nil } })) {
+                if let rs = reportSid, let sent = session.sentence(rs), let ref = session.ref {
+                    ReportSheet(articleKey: ref.key, sid: rs, sentence: ReadingSession.plainText(sent)) {
+                        session.showToast("已记下，导出诊断日志时会一起带上")
+                    }
+                    .environment(practice)
+                }
+            }
 
             if let allu = s.allu, !allu.isEmpty {
                 CardSection(title: "标题典故") { Text(allu) }

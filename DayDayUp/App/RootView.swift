@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Six entries. The tab bar turns into a sidebar with one tap (sidebarAdaptable), as Apple's HIG suggests for iPad.
+/// Six learning entries plus 设置. The tab bar turns into a sidebar with one tap
+/// (sidebarAdaptable), as Apple's HIG suggests for iPad.
 struct RootView: View {
     @Environment(Router.self) private var router
 
@@ -18,7 +19,10 @@ struct RootView: View {
                 }
             }
             Tab("跟读", systemImage: "waveform", value: AppTab.shadow) {
-                NavigationStack { ComingSoonView(feature: .shadowing) }
+                NavigationStack { ShadowView() }
+            }
+            Tab("雅思", systemImage: "text.bubble", value: AppTab.ielts) {
+                NavigationStack { IELTSView() }
             }
             Tab("词汇", systemImage: "character.book.closed", value: AppTab.vocab) {
                 NavigationStack { VocabView() }

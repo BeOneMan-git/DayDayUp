@@ -208,6 +208,11 @@ struct ReaderSettingsView: View {
             Section("听读") {
                 Toggle("点词时暂停播放", isOn: binding(\.pauseOnTap))
                 Toggle("自动跟随朗读滚动", isOn: binding(\.follow))
+                Picker("循环间隔", selection: binding(\.loopGap)) {
+                    ForEach(ReaderSettings.loopGaps, id: \.self) { g in
+                        Text(g == 0 ? "不停" : String(format: "%g 秒", g)).tag(g)
+                    }
+                }
                 Picker("系统朗读口音", selection: binding(\.accent)) {
                     Text("英音").tag("en-GB")
                     Text("美音").tag("en-US")

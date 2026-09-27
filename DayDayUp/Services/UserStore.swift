@@ -106,13 +106,6 @@ final class UserStore {
         !state.daily.isEmpty || !state.star.isEmpty || !state.known.isEmpty
     }
 
-    func backupDocument() -> BackupDocument {
-        var copy = state
-        copy.lastBackup = Date()
-        let data = (try? UserStore.encoder.encode(copy)) ?? Data()
-        return BackupDocument(data: data)
-    }
-
     var backupFileName: String {
         "DayDayUp-备份-\(DayKey.today)"
     }
@@ -121,12 +114,13 @@ final class UserStore {
         update { $0.lastBackup = Date() }
     }
 
-    /// Reads a backup file. Throws if it is not a DayDayUp backup.
-    func readBackup(at url: URL) throws -> UserState {
+    /// Reads a backup file: a full .ddubackup (V0.2+) or an old user.json (V0.1).
+    /// Throws if it is not a DayDayUp backup. Nothing is replaced here.
+    func readBackup(at url: URL) throws -> BackupContents {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: url)
-        return try UserStore.decoder.decode(UserState.self, from: data)
+        return try BackupArchive.read(data)
     }
 
     func restore(_ restored: UserState) {
@@ -136,7 +130,7 @@ final class UserStore {
 }
 
 struct BackupDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.json] }
+    static var readableContentTypes: [UTType] { [.ddubackup, .json] }
     var data: Data
 
     init(data: Data) {

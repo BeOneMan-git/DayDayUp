@@ -19,6 +19,11 @@ final class PlaybackEngine {
     @ObservationIgnored var onTick: ((Double) -> Void)?
     @ObservationIgnored var onNextSentence: (() -> Void)?
     @ObservationIgnored var onPreviousSentence: (() -> Void)?
+    /// Returns true while the microphone is recording; playback then refuses to start
+    /// (lock-screen or headphone "play" must not talk over a take).
+    @ObservationIgnored var blocksPlayback: (() -> Bool)?
+    /// Counts every pause, so a delayed resume can tell whether someone paused in between.
+    @ObservationIgnored private(set) var pauseCount = 0
 
     private let player = AVPlayer()
     private let clipPlayer = AVPlayer()
@@ -90,6 +95,9 @@ final class PlaybackEngine {
 
     func play() {
         guard hasAudio else { return }
+        if blocksPlayback?() == true { return }
+        // 跟读 and 口语 switch the session to record; listening goes back to plain playback.
+        AudioSessionControl.usePlayback()
         activateAudioSession()
         clipPlayer.pause()
         if time >= duration - 0.2 { seek(to: 0) }
@@ -100,6 +108,7 @@ final class PlaybackEngine {
     }
 
     func pause() {
+        pauseCount += 1
         wantsToPlay = false
         player.pause()
         isPlaying = false
@@ -159,7 +168,7 @@ final class PlaybackEngine {
     // MARK: Audio session and system events
 
     private func configureAudioSession() {
-        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [])
+        AudioSessionControl.usePlayback()
     }
 
     private func activateAudioSession() {
