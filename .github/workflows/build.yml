@@ -5,11 +5,13 @@
 #   the name stays plain ASCII letters: AltServer refuses Chinese app names with "The name for this app is invalid"),
 #   published as a pre-release DayDayUp-Test.ipa that is never marked latest; plus an iPad simulator smoke test
 #   whose screenshots (original demo content only) are attached to that pre-release.
+# - test and fix/* branches: UI tap tests on an iPad simulator in landscape (ci/ui_tests.sh). The gate must
+#   pass; results are annotations, and on test also ui-tests.zip on the pre-release.
 name: Build IPA
 
 on:
   push:
-    branches: [main, dev, test]
+    branches: [main, dev, test, 'fix/**']
   workflow_dispatch:
 
 permissions:
@@ -234,5 +236,51 @@ jobs:
         with:
           tag_name: test-build-${{ github.run_number }}
           files: simulator-screens.zip
+          prerelease: true
+          make_latest: false
+
+  uitest:
+    # Taps that must lead somewhere on an iPad simulator in landscape: the sidebar, a 书架 article, a 雅思 prompt,
+    # a 设置 row, and the portrait tab bar (test report 2026-09-27, F02/F03/F07/F12/F16). Plus the A/B control:
+    # the same taps with 1.0.0's root tap gesture put back, which must lead nowhere (never blocks).
+    if: github.ref == 'refs/heads/test' || startsWith(github.ref, 'refs/heads/fix/')
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Make the original demo content pack
+        run: python3 ci/demo_pack.py demo.ecopack
+
+      - name: UI tap tests (gate and A/B control)
+        run: bash ci/ui_tests.sh demo.ecopack ui-tests
+
+      - name: Pack UI test results
+        if: always()
+        run: |
+          mkdir -p ui-tests
+          rm -rf ui-tests/*.xcresult
+          zip -qry ui-tests.zip ui-tests
+          ls -la ui-tests.zip
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-tests
+          path: ui-tests.zip
+          if-no-files-found: ignore
+
+      - name: Attach UI test results to the test pre-release
+        if: always() && github.ref == 'refs/heads/test'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-build-${{ github.run_number }}
+          files: ui-tests.zip
           prerelease: true
           make_latest: false

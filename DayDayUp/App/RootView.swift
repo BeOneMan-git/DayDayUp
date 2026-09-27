@@ -42,7 +42,12 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .simultaneousGesture(TapGesture().onEnded { ActivityClock.shared.touch() })
+        // Taps on practice pages count as practice time (MET-01). They are watched on the window: a tap gesture
+        // here stopped the landscape sidebar and every List/Form row from responding (TouchActivityObserver).
+        .background { TouchActivityObserver { ActivityClock.shared.touch() } }
+        #if DEBUG
+        .modifier(LegacyRootTapDiagnosis())
+        #endif
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.width
         } action: { newWidth in

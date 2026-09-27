@@ -81,6 +81,22 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - ddubackup
+  # UI tap tests on an iPad simulator (ci/ui_tests.sh): the sidebar, List/Form rows and the tab bar must lead
+  # somewhere. Simulator only; the device builds never compile this target.
+  DayDayUpUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: DayDayUpUITests
+    dependencies:
+      - target: DayDayUp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daydayup.app.uitests
+        TARGETED_DEVICE_FAMILY: "2"
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_TARGET_NAME: DayDayUp
 schemes:
   DayDayUp:
     build:
@@ -88,5 +104,9 @@ schemes:
         DayDayUp: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - DayDayUpUITests
     archive:
       config: Release

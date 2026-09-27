@@ -9,6 +9,7 @@ import UIKit
 ///   -DDUTab <name>             today / library / shadow / ielts / vocab / progress / settings
 ///   -DDUOpenArticle <issue/id> open that article in 书架
 ///   -DDUOrientation <o>        landscape / portrait
+///   -DDULegacyRootTap 1        put back 1.0.0's root tap gesture (UI test LegacyRootTapDiagnosis only)
 @MainActor
 enum DebugHooks {
     static func value(_ name: String) -> String? {
@@ -65,6 +66,20 @@ enum DebugHooks {
             windowScene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
                 DiagLog.shared.log("debug", "rotate \(orientation) failed: \(error.localizedDescription)")
             }
+        }
+    }
+}
+
+/// With `-DDULegacyRootTap 1`, the root view gets back the tap gesture that 1.0.0 used for practice time.
+/// The UI test LegacyRootTapDiagnosis runs with it to show what that gesture broke (the sidebar and the
+/// List/Form rows stop responding), next to NavigationTapTests that run without it. Debug builds only.
+struct LegacyRootTapDiagnosis: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if DebugHooks.value("DDULegacyRootTap") == "1" {
+            content.simultaneousGesture(TapGesture().onEnded { ActivityClock.shared.touch() })
+        } else {
+            content
         }
     }
 }
