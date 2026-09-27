@@ -10,8 +10,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "2"
 targets:
   DayDayUp:
     type: application
@@ -56,7 +56,6 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: 跟读和口语练习时录下你的声音。录音只保存在这台 iPad 上，不会上传。
-        NSSpeechRecognitionUsageDescription: 把你的跟读录音转成文字，用来评分；识别在这台 iPad 上完成。
         CFBundleDocumentTypes:
           - CFBundleTypeName: DayDayUp 内容包
             CFBundleTypeRole: Viewer

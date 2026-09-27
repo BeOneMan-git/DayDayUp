@@ -132,7 +132,8 @@ struct AnnotatedSentenceView: View {
         .onTapGesture {
             open(p, m)
         }
-        .onLongPressGesture(minimumDuration: 0.4, perform: {
+        // SYS-P02: a finger that moves more than 8 pt is a scroll, never a long press.
+        .onLongPressGesture(minimumDuration: 0.4, maximumDistance: 8, perform: {
             open(p, m)
         })
         .popover(isPresented: popoverBinding(p)) {
@@ -866,12 +867,11 @@ private struct PronAnnotationPanel: View {
             Text(PronFormat.valueLine(e.ann, toks: sentence.toks))
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Picker("哪里不对", selection: $reportKind) {
+            ChoicePicker("哪里不对", selection: $reportKind) {
                 ForEach(PronAnnotationPanel.reportKinds, id: \.self) { kind in
                     Text(kind).tag(kind)
                 }
             }
-            .pickerStyle(.segmented)
             TextField("说明（可以不写）", text: $reportNote, axis: .vertical)
                 .lineLimit(2...5)
                 .textFieldStyle(.roundedBorder)

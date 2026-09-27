@@ -67,7 +67,14 @@ struct UserState: Codable, Equatable {
 }
 
 struct ReaderSettings: Codable, Equatable {
-    var fontStep: Int = 1          // 0 body, 1 title3, 2 title2, 3 title
+    /// Old text size step (V0.1–V0.5: 0 body, 1 title3, 2 title2, 3 title). Still decoded and saved so old
+    /// files and backups open; views use `fontSize`.
+    var fontStep: Int = 1
+    /// English reading text in pt (UI-P01: 24 pt, 18…34 pt). Dynamic Type scales it further
+    /// (Theme.readingPointSize).
+    var fontSize: Double = ReaderSettings.defaultFontSize
+    /// 主题 (UI-P04): "system" / "light" / "dark".
+    var appearance: String = "system"
     var threshold: Int = 6         // underline IELTS level >= threshold; 0 = off
     var showTrap: Bool = true      // 熟词僻义 dotted underline
     var showPhrase: Bool = false   // phrase dashed underline
@@ -85,13 +92,21 @@ struct ReaderSettings: Codable, Equatable {
     init() {}
 
     enum CodingKeys: String, CodingKey {
-        case fontStep, threshold, showTrap, showPhrase, pauseOnTap, follow, showZh, accent, rate
+        case fontStep, fontSize, appearance, threshold, showTrap, showPhrase, pauseOnTap, follow, showZh, accent, rate
         case loopGap, shadowRate, abGap, retellSeconds, shadowMode
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        fontStep = try c.decodeIfPresent(Int.self, forKey: .fontStep) ?? 1
+        fontStep = (try? c.decodeIfPresent(Int.self, forKey: .fontStep)) ?? 1
+        // A file from before V1.0 has no fontSize: take it from the old step (0 → 20, 1 → 24, 2 → 28, 3 → 32).
+        if let size = try? c.decodeIfPresent(Double.self, forKey: .fontSize) {
+            fontSize = ReaderSettings.clampedFontSize(size)
+        } else {
+            fontSize = ReaderSettings.fontSize(fromStep: fontStep)
+        }
+        let look = (try? c.decodeIfPresent(String.self, forKey: .appearance)) ?? "system"
+        appearance = ReaderSettings.appearances.contains(look) ? look : "system"
         threshold = try c.decodeIfPresent(Int.self, forKey: .threshold) ?? 6
         showTrap = try c.decodeIfPresent(Bool.self, forKey: .showTrap) ?? true
         showPhrase = try c.decodeIfPresent(Bool.self, forKey: .showPhrase) ?? false
@@ -105,6 +120,26 @@ struct ReaderSettings: Codable, Equatable {
         abGap = min(2, max(0, (try? c.decodeIfPresent(Double.self, forKey: .abGap)) ?? 0.5))
         retellSeconds = min(120, max(30, (try? c.decodeIfPresent(Double.self, forKey: .retellSeconds)) ?? 60))
         shadowMode = (try? c.decodeIfPresent(String.self, forKey: .shadowMode)) ?? "repeat"
+    }
+
+    static let defaultFontSize: Double = 24
+    static let fontSizeRange: ClosedRange<Double> = 18...34
+    static let appearances = ["system", "light", "dark"]
+
+    /// Whole points inside 18…34; anything unreadable becomes the default 24.
+    static func clampedFontSize(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultFontSize }
+        return min(fontSizeRange.upperBound, max(fontSizeRange.lowerBound, value.rounded()))
+    }
+
+    /// The V0.x text size steps in pt.
+    static func fontSize(fromStep step: Int) -> Double {
+        switch step {
+        case 0: return 20
+        case 2: return 28
+        case 3: return 32
+        default: return 24
+        }
     }
 
     static let rates: [Double] = [0.5, 0.6, 0.75, 0.85, 1.0, 1.1, 1.25, 1.5]

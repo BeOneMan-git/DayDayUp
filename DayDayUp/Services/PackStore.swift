@@ -54,9 +54,14 @@ final class PackStore {
     private(set) var isImporting = false
     var lastMessage: String?
 
+    /// .ecopack files waiting in Documents (Finder / iTunes file sharing, the Files app) or Documents/Inbox
+    /// ("Open in"). They are only found here; the learner imports them through the preview (IMP-F04).
+    private(set) var pendingInbox: [URL] = []
+    /// Files opened with the app from another place (opened in place, not copied in), until their preview closes.
+    private(set) var openedFiles: [URL] = []
+
     let root: URL
     @ObservationIgnored private var lexiconTask: Task<Void, Never>?
-    @ObservationIgnored private var isScanning = false
     /// Called after an update changed sentences of articles that were already installed (PKG-P03).
     @ObservationIgnored var onArticlesChanged: (([ArticleDiff]) -> Void)?
     @ObservationIgnored private var articleCache: [String: Article] = [:]
@@ -93,6 +98,10 @@ final class PackStore {
         for dir in dirs where dir.lastPathComponent.hasPrefix(".tmp-") {
             try? fm.removeItem(at: dir)
         }
+        // A copy into Documents/冲突副本 that stopped half-way.
+        PackImporter.cleanPartialCopies(documents: documentsFolder)
+        // A restore check (temporary library) or a 恢复前 copy that stopped half-way; nothing uses them at launch.
+        RestoreDrill.cleanLeftovers()
     }
 
     // MARK: Listing
@@ -315,56 +324,175 @@ final class PackStore {
         }
     }
 
-    // MARK: Import
+    // MARK: Import (IMP-F04, IMP-P04, PKG-P05, ACC-04/05/06/08)
+    //
+    // Nothing is installed without a preview: files are read and checked first (PackImporter.stage),
+    // the learner confirms per file, and each confirmed file is checked again and committed with a folder swap.
 
-    /// Imports one .ecopack. Returns a short message for the UI.
-    @discardableResult
-    func importPack(from url: URL, moveAfterImport: Bool = false) async -> String {
-        isImporting = true
-        defer { isImporting = false }
-        let root = self.root
-        do {
-            let (manifest, changed, diffs) = try await Task.detached(priority: .userInitiated) {
-                try PackStore.install(archive: url, into: root)
-            }.value
-            if moveAfterImport { PackStore.moveToImportedFolder(url) }
-            if changed { reload() }
-            if !diffs.isEmpty { onArticlesChanged?(diffs) }
-            let part = manifest.parts > 1 ? "（第 \(manifest.part)/\(manifest.parts) 部分）" : ""
-            let message = changed
-                ? "已导入 \(manifest.issue) 期\(part)，\(manifest.articles.count) 篇"
-                : "已是最新：\(manifest.issue) 期\(part)"
-            lastMessage = message
-            DiagLog.shared.log("pack", message)
-            return message
-        } catch {
-            let message = "导入失败：\(url.lastPathComponent)。\(error.localizedDescription)"
-            lastMessage = message
-            DiagLog.shared.log("pack", message)
-            return message
+    /// Everything that waits for a preview: files in the app's folder first, then files opened from elsewhere.
+    var waitingFiles: [URL] {
+        var out = pendingInbox
+        var seen = Set(out.map { PackStore.pathKey($0) })
+        for url in openedFiles where seen.insert(PackStore.pathKey(url)).inserted {
+            out.append(url)
+        }
+        return out
+    }
+
+    /// Finds .ecopack files in Documents and Documents/Inbox. It never installs anything.
+    func scanInbox() async {
+        let found = PackStore.inboxFiles()
+        if found != pendingInbox { pendingInbox = found }
+    }
+
+    /// A file arrived through "Open in" / AirDrop / the Files app (onOpenURL).
+    func noteOpened(_ url: URL) {
+        guard url.isFileURL else { return }
+        if PackStore.isInInbox(url) {
+            pendingInbox = PackStore.inboxFiles()
+        } else if !openedFiles.contains(where: { PackStore.pathKey($0) == PackStore.pathKey(url) }) {
+            openedFiles.append(url)
         }
     }
 
-    /// Picks up .ecopack files copied into the app's Documents folder
-    /// (Finder / iTunes file sharing, or Files app "On My iPad › DayDayUp").
-    func scanInbox() async {
-        // Launch triggers two scans (task + scene becoming active); run one at a time.
-        guard !isScanning else { return }
-        isScanning = true
-        defer { isScanning = false }
-        let fm = FileManager.default
-        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        var found: [URL] = []
-        for dir in [docs, docs.appendingPathComponent("Inbox", isDirectory: true)] {
-            let items = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-            found += items.filter { $0.pathExtension.lowercased() == "ecopack" }
+    /// The preview of these files was closed: files opened from elsewhere stop waiting.
+    func forgetOpened(_ urls: [URL]) {
+        let keys = Set(urls.map { PackStore.pathKey($0) })
+        openedFiles.removeAll { keys.contains(PackStore.pathKey($0)) }
+    }
+
+    /// Reads and checks the files off the main actor; nothing is written. `progress` gets (done, total, file name).
+    func stageImport(_ urls: [URL], progress: (Int, Int, String) -> Void) async -> [ImportCandidate] {
+        let root = self.root
+        var out: [ImportCandidate] = []
+        for (i, url) in urls.enumerated() {
+            if Task.isCancelled { break }
+            progress(i, urls.count, url.lastPathComponent)
+            let inbox = PackStore.isInInbox(url)
+            let candidate = await Task.detached(priority: .userInitiated) {
+                PackImporter.stage(url, fromInbox: inbox, root: root)
+            }.value
+            out.append(candidate)
         }
-        guard !found.isEmpty else { return }
-        var messages: [String] = []
-        for url in found.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
-            messages.append(await importPack(from: url, moveAfterImport: true))
+        progress(urls.count, urls.count, "")
+        return out
+    }
+
+    /// Free space where packs are installed (nil when the system does not say).
+    func freeSpace() -> Int64? {
+        PackImporter.freeSpace(at: root)
+    }
+
+    /// Carries out one confirmed choice. The library changes only when the whole file checks out again;
+    /// afterwards the list is reloaded and changed sentences go to `onArticlesChanged`, as before.
+    func commitImport(_ c: ImportCandidate, choice: ImportChoice) async -> ImportOutcome {
+        switch choice {
+        case .skip:
+            return skipOutcome(c)
+        case .keepCopy:
+            isImporting = true
+            defer { isImporting = false }
+            let docs = PackStore.documentsFolder
+            do {
+                let place = try await Task.detached(priority: .userInitiated) {
+                    try PackImporter.keepCopy(c, documents: docs)
+                }.value
+                let message = "没有导入，书架不变。文件原样存到了“文件 › 我的 iPad › DayDayUp › \(place)”。"
+                DiagLog.shared.log("pack", "\(c.fileName): kept a copy in \(place)")
+                pendingInbox = PackStore.inboxFiles()
+                return ImportOutcome(id: c.id, fileName: c.fileName, state: .kept, message: message)
+            } catch {
+                return failedOutcome(c, error)
+            }
+        case .install, .replace:
+            isImporting = true
+            defer { isImporting = false }
+            let root = self.root
+            do {
+                let done = try await Task.detached(priority: .userInitiated) {
+                    try PackImporter.commitInstall(c, choice: choice, root: root)
+                }.value
+                var message = PackImporter.successMessage(done)
+                if c.fromInbox {
+                    message += PackStore.moveToImportedFolder(c.url)
+                        ? "文件移到了“已导入”文件夹。"
+                        : "文件没能移到“已导入”文件夹，还在原处。"
+                }
+                reload()
+                if !done.diffs.isEmpty { onArticlesChanged?(done.diffs) }
+                pendingInbox = PackStore.inboxFiles()
+                DiagLog.shared.log("pack", "\(c.fileName): \(message)")
+                return ImportOutcome(id: c.id, fileName: c.fileName, state: .installed, message: message)
+            } catch {
+                return failedOutcome(c, error)
+            }
         }
-        lastMessage = messages.joined(separator: "\n")
+    }
+
+    private func skipOutcome(_ c: ImportCandidate) -> ImportOutcome {
+        switch c.kind {
+        case .identical:
+            var message = "已经导入过，不会重复导入。"
+            if c.fromInbox {
+                message += PackStore.moveToImportedFolder(c.url)
+                    ? "文件移到了“已导入”文件夹。"
+                    : "文件没能移到“已导入”文件夹，还在原处。"
+                pendingInbox = PackStore.inboxFiles()
+            }
+            return ImportOutcome(id: c.id, fileName: c.fileName, state: .unchanged, message: message)
+        case .invalid:
+            let message = "没有导入：发现 \(c.problems.count) 个问题。原来的书架没有改动。"
+            DiagLog.shared.log("pack", "\(c.fileName): refused, " + c.problems.joined(separator: "; "))
+            return ImportOutcome(id: c.id, fileName: c.fileName, state: .failed, message: message)
+        case .conflict:
+            return ImportOutcome(id: c.id, fileName: c.fileName, state: .skipped, message: "保留当前版本，没有导入。")
+        case .new, .update:
+            return ImportOutcome(id: c.id, fileName: c.fileName, state: .skipped, message: "没有选，没有导入。")
+        }
+    }
+
+    private func failedOutcome(_ c: ImportCandidate, _ error: Error) -> ImportOutcome {
+        let reason = error.localizedDescription
+        let message: String
+        if let failure = error as? PackImportFailure, case .noSpace = failure {
+            message = reason + "。"
+        } else {
+            message = "没有导入：\(reason)。原来的书架没有改动。"
+        }
+        DiagLog.shared.log("pack", "\(c.fileName): \(message)")
+        return ImportOutcome(id: c.id, fileName: c.fileName, state: .failed, message: message)
+    }
+
+    /// After the learner's batch: one truthful line per file for 设置 and the diagnostics.
+    func finishImport(_ outcomes: [ImportOutcome]) {
+        guard !outcomes.isEmpty else { return }
+        lastMessage = outcomes.map { "\($0.fileName)：\($0.message)" }.joined(separator: "\n")
+        pendingInbox = PackStore.inboxFiles()
+    }
+
+    /// Imports one .ecopack without a preview, with the safe defaults of the preview: a new pack or a newer
+    /// version is installed; an identical one is left alone; a conflict keeps the installed version.
+    /// Returns a short message for the UI.
+    @discardableResult
+    func importPack(from url: URL, moveAfterImport: Bool = false) async -> String {
+        let staged = await stageImport([url]) { _, _, _ in }
+        guard let c = staged.first else { return "" }
+        let choice: ImportChoice
+        switch c.kind {
+        case .new, .update(_, false):
+            choice = .install
+        default:
+            choice = .skip
+        }
+        let outcome = await commitImport(c, choice: choice)
+        var message = "\(c.fileName)：\(outcome.message)"
+        if c.kind == .conflict {
+            message = "\(c.fileName)：和书架上同一版本的内容不同，没有导入。请用“导入内容包”查看并选择。"
+        } else if c.kind == .invalid {
+            message = "导入失败：\(c.fileName)。" + c.problems.joined(separator: "；")
+        }
+        lastMessage = message
+        return message
     }
 
     func delete(_ pack: InstalledPack) {
@@ -373,104 +501,40 @@ final class PackStore {
         lastMessage = "已删除 \(pack.manifest.issue) 期内容包。你的学习记录还在。"
     }
 
-    // MARK: File work (runs off the main actor)
+    // MARK: File helpers (nonisolated)
 
-    nonisolated static func install(archive url: URL, into root: URL) throws -> (PackManifest, Bool, [ArticleDiff]) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        let entries = try TarReader.entries(in: data)
-        guard let manifestEntry = entries.first(where: { $0.name == "manifest.json" }) else {
-            throw PackError.noManifest
-        }
-        let manifest = try JSONDecoder().decode(PackManifest.self, from: data[manifestEntry.range])
-        guard manifest.format == 1 || manifest.format == 2 else { throw PackError.unsupportedFormat(manifest.format) }
-        let missing = manifest.missingRequiredFields
-        guard missing.isEmpty else { throw PackError.missingFields(missing) }
-
-        // Paths must stay inside the pack folder, and each name may appear once (PKG-P02).
-        var names = Set<String>()
-        for entry in entries {
-            let n = entry.name
-            if n.hasPrefix("/") || n.contains("..") || n.contains("\\") || n.isEmpty {
-                throw PackError.unsafePath(n)
-            }
-            if !names.insert(n).inserted { throw PackError.duplicateName(n) }
-        }
-
-        // Verify every listed file: size and SHA-256.
-        for (name, info) in manifest.checks {
-            guard let entry = entries.first(where: { $0.name == name }) else {
-                throw PackError.missingFile(name)
-            }
-            guard entry.range.count == info.size, sha256(data[entry.range]) == info.sha256.lowercased() else {
-                throw PackError.corrupt(name)
-            }
-        }
-        // Every article's text and audio must be in the pack.
-        for meta in manifest.articles {
-            for name in ["articles/\(meta.id).json", meta.audio] where !names.contains(name) {
-                throw PackError.missingFile(name)
-            }
-        }
-
-        let fm = FileManager.default
-        let dest = root.appendingPathComponent(safeName(manifest.packId), isDirectory: true)
-        let oldManifestURL = dest.appendingPathComponent("manifest.json")
-        let oldManifest = try? JSONDecoder().decode(PackManifest.self, from: Data(contentsOf: oldManifestURL))
-        if let old = oldManifest, old.version == manifest.version {
-            return (manifest, false, [])
-        }
-
-        // An update of an installed pack: compare sentences before the old files go away.
-        var diffs: [ArticleDiff] = []
-        if let old = oldManifest {
-            let decoder = JSONDecoder()
-            for meta in old.articles {
-                let ref = ArticleRef(issue: old.issue, id: meta.id)
-                guard let oldArticle = try? decoder.decode(Article.self, from: Data(contentsOf: dest.appendingPathComponent("articles/\(meta.id).json"))) else { continue }
-                var newHashes: [Int: String] = [:]
-                if let entry = entries.first(where: { $0.name == "articles/\(meta.id).json" }),
-                   manifest.issue == old.issue,
-                   let newArticle = try? decoder.decode(Article.self, from: data[entry.range]) {
-                    newHashes = PackDiffer.hashes(newArticle)
-                }
-                let d = PackDiffer.diff(article: ref, old: PackDiffer.hashes(oldArticle), new: newHashes,
-                                        idMap: manifest.idMap?[meta.id])
-                if d.hasChanges { diffs.append(d) }
-            }
-        }
-
-        let temp = root.appendingPathComponent(".tmp-\(UUID().uuidString)", isDirectory: true)
-        try fm.createDirectory(at: temp, withIntermediateDirectories: true)
-        do {
-            for entry in entries {
-                let out = temp.appendingPathComponent(entry.name)
-                try fm.createDirectory(at: out.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try Data(data[entry.range]).write(to: out, options: .atomic)
-            }
-        } catch {
-            try? fm.removeItem(at: temp)
-            throw error
-        }
-        // Swap folders so a failure never leaves the old pack half-deleted (ACC-08).
-        let previous = root.appendingPathComponent(".old-\(UUID().uuidString)", isDirectory: true)
-        let hadOld = fm.fileExists(atPath: dest.path)
-        do {
-            if hadOld { try fm.moveItem(at: dest, to: previous) }
-            try fm.moveItem(at: temp, to: dest)
-        } catch {
-            if hadOld, !fm.fileExists(atPath: dest.path) { try? fm.moveItem(at: previous, to: dest) }
-            try? fm.removeItem(at: temp)
-            throw error
-        }
-        if hadOld { try? fm.removeItem(at: previous) }
-        return (manifest, true, diffs)
+    nonisolated static var documentsFolder: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 
-    /// After an automatic import, the file moves to Documents/已导入 so it is not imported again.
-    nonisolated static func moveToImportedFolder(_ url: URL) {
+    /// .ecopack files in Documents and Documents/Inbox, by name.
+    nonisolated static func inboxFiles() -> [URL] {
+        let fm = FileManager.default
+        let docs = documentsFolder
+        var found: [URL] = []
+        for dir in [docs, docs.appendingPathComponent("Inbox", isDirectory: true)] {
+            let items = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+            found += items.filter { $0.pathExtension.lowercased() == "ecopack" }
+        }
+        return found.sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// True for a file directly in Documents or Documents/Inbox.
+    nonisolated static func isInInbox(_ url: URL) -> Bool {
+        let docs = pathKey(documentsFolder)
+        let parent = pathKey(url.deletingLastPathComponent())
+        return parent == docs || parent == docs + "/Inbox"
+    }
+
+    /// A path for comparing file URLs (symlinks such as /private resolved the same way on both sides).
+    nonisolated static func pathKey(_ url: URL) -> String {
+        url.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+
+    /// After an import from the app's folder, the file moves to Documents/已导入 so it does not wait again.
+    /// Returns false when the move failed (the file is still where it was).
+    @discardableResult
+    nonisolated static func moveToImportedFolder(_ url: URL) -> Bool {
         let fm = FileManager.default
         var base = url.deletingLastPathComponent()
         if base.lastPathComponent == "Inbox" {      // files that arrive through "Open in"
@@ -480,7 +544,13 @@ final class PackStore {
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let target = dir.appendingPathComponent(url.lastPathComponent)
         try? fm.removeItem(at: target)
-        try? fm.moveItem(at: url, to: target)
+        do {
+            try fm.moveItem(at: url, to: target)
+            return true
+        } catch {
+            DiagLog.shared.log("pack", "could not move \(url.lastPathComponent) to 已导入: \(error.localizedDescription)")
+            return false
+        }
     }
 
     nonisolated static func sha256<D: DataProtocol>(_ data: D) -> String {

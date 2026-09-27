@@ -156,13 +156,13 @@ enum TodayPlanner {
         case .shadow(let issue, let id, _):
             let key = ArticleRef(issue: issue, id: id).key
             let takes = practice.state.shadow
-                .filter { $0.article == key && !$0.silent && DayKey.of($0.created) == day }
+                .filter { $0.article == key && !$0.silent && $0.dayKey == day }
                 .map(\.created)
                 .sorted()
             return takes.count >= 3 ? takes[2] : nil
         case .speaking(let promptId):
             return practice.state.speaking
-                .filter { $0.promptId == promptId && !$0.silent && DayKey.of($0.created) == day }
+                .filter { $0.promptId == promptId && !$0.silent && $0.dayKey == day }
                 .map(\.created)
                 .min()
         case .writing(let promptId):

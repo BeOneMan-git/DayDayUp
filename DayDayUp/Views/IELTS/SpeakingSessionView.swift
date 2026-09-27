@@ -79,13 +79,15 @@ struct SpeakingSessionView: View {
 
     private var promptCard: some View {
         PracticeCard {
-            HStack {
+            FlowLayout(spacing: 8, lineSpacing: 8) {
                 Badge(text: prompt.topic)
                 Badge(text: "准备 30 秒 · 说 45 秒", outlined: true)
-                Spacer()
-                Toggle("提示", isOn: $showHints)
-                    .toggleStyle(.button)
-                    .controlSize(.small)
+                Toggle(isOn: $showHints) {
+                    Label(showHints ? "收起提示" : "提示", systemImage: showHints ? "lightbulb.fill" : "lightbulb")
+                        .frame(minHeight: 44)
+                }
+                .toggleStyle(.button)
+                .accessibilityValue(showHints ? "已展开" : "已收起")
             }
             Text(prompt.question)
                 .font(Font.system(.title2, design: .serif).weight(.semibold))
@@ -106,7 +108,7 @@ struct SpeakingSessionView: View {
     // MARK: Phases
 
     private var readyCard: some View {
-        HStack(spacing: 12) {
+        FlowLayout(spacing: 12, lineSpacing: 12) {
             Button {
                 startPreparing()
             } label: {
@@ -167,12 +169,11 @@ struct SpeakingSessionView: View {
     private var reviewSection: some View {
         if let id = workId, let work = practice.speaking(id) {
             PracticeCard {
-                HStack {
+                FlowLayout(spacing: 10, lineSpacing: 8) {
                     Text("这次：\(String(format: "%.0f", work.speakSeconds)) 秒")
                         .font(.headline)
                     if !work.independent { Badge(text: "看过参考后", color: Theme.warn, outlined: true) }
                     if work.interrupted { Badge(text: "被打断", color: Theme.warn, outlined: true) }
-                    Spacer()
                     Button {
                         if player.playing == .mine {
                             player.stop()
@@ -182,12 +183,13 @@ struct SpeakingSessionView: View {
                         }
                     } label: {
                         Label(player.playing == .mine ? "停止" : "回放", systemImage: player.playing == .mine ? "stop.fill" : "play.fill")
+                            .frame(minHeight: 44)
                     }
                     .buttonStyle(.bordered)
                     .disabled(practice.recordingURL(work.file) == nil)
                 }
                 if work.silent {
-                    Text("只录到静音。看看麦克风有没有被挡住，再说一次。")
+                    Label("只录到静音。看看麦克风有没有被挡住，再说一次。", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(Theme.warn)
                 }
             }
@@ -221,17 +223,19 @@ struct SpeakingSessionView: View {
 
             FeedbackList(items: work.feedback)
 
-            HStack(spacing: 12) {
+            FlowLayout(spacing: 12, lineSpacing: 12) {
                 Button {
                     resetForRetake()
                 } label: {
                     Label("再说一次", systemImage: "arrow.counterclockwise")
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.bordered)
                 Button {
                     showFeedback = true
                 } label: {
                     Label("录入反馈", systemImage: "square.and.pencil")
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.bordered)
                 Button {
@@ -239,6 +243,7 @@ struct SpeakingSessionView: View {
                     message = "已复制题目和反馈要求。把你的回答打成文字贴在后面，再发给 Claude。"
                 } label: {
                     Label("复制给 Claude", systemImage: "doc.on.doc")
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.bordered)
             }
@@ -247,16 +252,16 @@ struct SpeakingSessionView: View {
 
     private var referenceCard: some View {
         PracticeCard {
-            HStack {
+            AdaptiveStack(spacing: 10) {
                 Text("参考思路").font(.headline)
-                Spacer()
+                Spacer(minLength: 8)
                 Button {
                     Speaker.shared.speak(prompt.model, language: "en-GB")
                 } label: {
                     Label("听参考（合成音）", systemImage: "speaker.wave.2")
+                        .frame(minHeight: 44)
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
             }
             ForEach(prompt.outline, id: \.self) { line in
                 Label(line, systemImage: "arrow.right.circle")
@@ -290,15 +295,18 @@ struct SpeakingSessionView: View {
                         } label: {
                             Image(systemName: "play.circle")
                                 .font(.title2)
-                                .frame(width: 44, height: 44)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .disabled(practice.recordingURL(w.file) == nil)
+                        .accessibilityLabel("回放这次回答")
                         VStack(alignment: .leading, spacing: 2) {
                             Text(w.created.formatted(date: .abbreviated, time: .shortened)).font(.callout)
                             Text("\(String(format: "%.0f", w.speakSeconds)) 秒 · \(w.independent ? "独立完成" : "看过参考后") · 反馈 \(w.feedback.count) 条")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                            RecordingGoneBadge(file: w.file)
                         }
                         Spacer()
                         if w.check != nil { Badge(text: "已自评", outlined: true) }

@@ -168,7 +168,7 @@ struct Part2SessionView: View {
                            limit: timings.part2Limit, target: timings.part2TalkMax)
             if roundingAt == nil {
                 Part2TalkStatus(elapsed: recorder.elapsed)
-                HStack(spacing: 12) {
+                FlowLayout(spacing: 12, lineSpacing: 12) {
                     Button {
                         showRounding(at: recorder.elapsed)
                     } label: {
@@ -202,11 +202,10 @@ struct Part2SessionView: View {
     private var reviewSection: some View {
         if let id = workId, let work = practice.speaking(id) {
             PracticeCard {
-                HStack(alignment: .center, spacing: 8) {
+                FlowLayout(spacing: 8, lineSpacing: 8) {
                     Text(timeLine(work))
                         .font(.headline.monospacedDigit())
                     if work.interrupted { Badge(text: "被打断", color: Theme.warn, outlined: true) }
-                    Spacer()
                     playButton(work)
                 }
                 if let talk = talkSeconds, talk < timings.part2TalkMin, !work.silent {
@@ -325,7 +324,7 @@ struct Part2SessionView: View {
             } label: {
                 Image(systemName: playingThis ? "stop.circle" : "play.circle")
                     .font(.title2)
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
             .disabled(practice.recordingURL(w.file) == nil || recorder.isRecording)
@@ -335,6 +334,7 @@ struct Part2SessionView: View {
                 Text("准备 \(formatTime(w.prepSeconds)) · 录音 \(formatTime(w.speakSeconds)) · \(w.independent ? "独立完成" : "看过反馈后") · 反馈 \(w.feedback.count) 条")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                RecordingGoneBadge(file: w.file)
                 if let n = w.notes, !n.isEmpty {
                     DisclosureGroup {
                         Text(n)

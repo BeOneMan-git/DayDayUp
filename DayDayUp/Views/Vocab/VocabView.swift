@@ -30,12 +30,11 @@ struct VocabView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("词汇子页", selection: page) {
+            ChoicePicker("词汇子页", selection: page) {
                 ForEach(Page.allCases) { p in
                     Text(p.title).tag(p)
                 }
             }
-            .pickerStyle(.segmented)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .frame(maxWidth: 720)

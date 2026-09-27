@@ -240,13 +240,15 @@ struct WritingSessionView: View {
 
     private func basicPromptCard(_ prompt: WritingPrompt) -> some View {
         PracticeCard {
-            HStack {
+            FlowLayout(spacing: 8, lineSpacing: 8) {
                 Badge(text: prompt.topic)
                 Badge(text: "5–10 分钟 · 3–5 句", outlined: true)
-                Spacer()
-                Toggle("提示", isOn: $showHints)
-                    .toggleStyle(.button)
-                    .controlSize(.small)
+                Toggle(isOn: $showHints) {
+                    Label(showHints ? "收起提示" : "提示", systemImage: showHints ? "lightbulb.fill" : "lightbulb")
+                        .frame(minHeight: 44)
+                }
+                .toggleStyle(.button)
+                .accessibilityValue(showHints ? "已展开" : "已收起")
             }
             Text(prompt.task)
                 .font(Font.system(.title3, design: .serif).weight(.semibold))

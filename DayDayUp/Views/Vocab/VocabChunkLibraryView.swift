@@ -23,12 +23,11 @@ struct VocabChunkLibraryView: View {
                     .foregroundStyle(.secondary)
                     .padding(.vertical, 4)
                 searchField
-                Picker("排序", selection: $sort) {
+                ChoicePicker("排序", selection: $sort) {
                     ForEach(ChunkLibrarySort.allCases) { s in
                         Text(s.title).tag(s)
                     }
                 }
-                .pickerStyle(.segmented)
             }
             Section {
                 if chunks.isEmpty {
@@ -77,7 +76,7 @@ struct VocabChunkLibraryView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
+                        .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
@@ -169,12 +168,10 @@ private struct ChunkLibraryRow: View {
             Text(item.gloss.isEmpty ? "还没有中文义" : item.gloss)
                 .font(.callout)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
             if !extra.isEmpty {
                 Text(extra)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
         }
         .padding(.vertical, 4)

@@ -54,6 +54,8 @@ struct ShadowAttempt: Codable, Equatable, Identifiable {
     var followFile: String? = nil    // 脱稿复述: the recorded answer to it
     var followSeconds: Double? = nil
     var selfNote: String? = nil      // what the learner noticed afterwards
+    var day: String? = nil           // V1.0 ACC-13: local day key when it was made (never rewritten)
+    var tz: Int? = nil               // seconds from GMT at that moment
 }
 
 /// One spoken answer to a speaking prompt.
@@ -79,11 +81,13 @@ struct SpeakingWork: Codable, Equatable, Identifiable {
     var mockId: String? = nil
     var notes: String? = nil
     var retestOf: String? = nil      // V0.5: a new-prompt retest of this earlier work (IEL-F04)
+    var day: String? = nil           // V1.0 ACC-13: local day key when it was made (never rewritten)
+    var tz: Int? = nil               // seconds from GMT at that moment
 
     enum CodingKeys: String, CodingKey {
         case id, promptId, question, created, prepSeconds, speakSeconds, target, file
         case peakDb, silent, interrupted, independent, check, sawReference, feedback
-        case part, mockId, notes, retestOf
+        case part, mockId, notes, retestOf, day, tz
     }
 
     init(id: String, promptId: String, question: String, created: Date, prepSeconds: Double,
@@ -127,6 +131,8 @@ struct SpeakingWork: Codable, Equatable, Identifiable {
         mockId = try? c.decodeIfPresent(String.self, forKey: .mockId)
         notes = try? c.decodeIfPresent(String.self, forKey: .notes)
         retestOf = try? c.decodeIfPresent(String.self, forKey: .retestOf)
+        day = try? c.decodeIfPresent(String.self, forKey: .day)
+        tz = try? c.decodeIfPresent(Int.self, forKey: .tz)
     }
 }
 
@@ -145,10 +151,12 @@ struct WritingWork: Codable, Equatable, Identifiable {
     var minWords: Int? = nil
     var targetMinutes: Double? = nil
     var retestOf: String? = nil      // V0.5: a new-prompt retest of this earlier work (IEL-F04)
+    var day: String? = nil           // V1.0 ACC-13: local day key when it was made (never rewritten)
+    var tz: Int? = nil               // seconds from GMT at that moment
 
     enum CodingKeys: String, CodingKey {
         case id, promptId, task, created, versions, feedback, sawReference
-        case kind, minWords, targetMinutes, retestOf
+        case kind, minWords, targetMinutes, retestOf, day, tz
     }
 
     init(id: String, promptId: String, task: String, created: Date, versions: [WritingVersion]) {
@@ -174,6 +182,8 @@ struct WritingWork: Codable, Equatable, Identifiable {
         minWords = try? c.decodeIfPresent(Int.self, forKey: .minWords)
         targetMinutes = try? c.decodeIfPresent(Double.self, forKey: .targetMinutes)
         retestOf = try? c.decodeIfPresent(String.self, forKey: .retestOf)
+        day = try? c.decodeIfPresent(String.self, forKey: .day)
+        tz = try? c.decodeIfPresent(Int.self, forKey: .tz)
     }
 
     var latest: WritingVersion? { versions.last }
@@ -203,6 +213,8 @@ struct MockSession: Codable, Equatable, Identifiable {
     var seconds: Double              // total time from start to end
     var check: SelfCheck?
     var feedback: [Feedback]
+    var day: String? = nil           // V1.0 ACC-13: local day key when it was made (never rewritten)
+    var tz: Int? = nil               // seconds from GMT at that moment
 
     init(id: String, created: Date) {
         self.id = id
@@ -216,7 +228,7 @@ struct MockSession: Codable, Equatable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, created, finished, interrupted, answers, seconds, check, feedback
+        case id, created, finished, interrupted, answers, seconds, check, feedback, day, tz
     }
 
     init(from decoder: Decoder) throws {
@@ -229,6 +241,8 @@ struct MockSession: Codable, Equatable, Identifiable {
         seconds = (try? c.decodeIfPresent(Double.self, forKey: .seconds)) ?? 0
         check = try? c.decodeIfPresent(SelfCheck.self, forKey: .check)
         feedback = c.lossyArray(Feedback.self, forKey: .feedback)
+        day = try? c.decodeIfPresent(String.self, forKey: .day)
+        tz = try? c.decodeIfPresent(Int.self, forKey: .tz)
     }
 
     var isComplete: Bool { finished != nil && !interrupted }
@@ -288,4 +302,24 @@ enum WritingStats {
         if hasContent { count += 1 }
         return count
     }
+}
+
+// MARK: ACC-13 day keys
+
+/// The day a record belongs to: the key stored when it was made (so a later time-zone change never moves it),
+/// or, for records made before V1.0, the day computed from its time.
+extension ShadowAttempt {
+    var dayKey: String { day ?? DayKey.of(created) }
+}
+
+extension SpeakingWork {
+    var dayKey: String { day ?? DayKey.of(created) }
+}
+
+extension WritingWork {
+    var dayKey: String { day ?? DayKey.of(created) }
+}
+
+extension MockSession {
+    var dayKey: String { day ?? DayKey.of(created) }
 }

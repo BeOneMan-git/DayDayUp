@@ -198,6 +198,22 @@ final class MetricsTests: XCTestCase {
         XCTAssertEqual(Metrics.issues(practice: p, since: nil, retracted: ["speaking:pr#1"]).count, 1)
     }
 
+    func testStoredDayKeyWins() throws {
+        var w = SpeakingWork(id: "w", promptId: "p", question: "q", created: base, prepSeconds: 0, speakSeconds: 40,
+                             target: 45, file: nil, peakDb: -10, silent: false, interrupted: false, independent: true)
+        XCTAssertEqual(w.dayKey, DayKey.of(base), "records from before V1.0 fall back to their time")
+        w.day = "2000-01-01"
+        XCTAssertEqual(w.dayKey, "2000-01-01", "ACC-13: a later time-zone change never moves a record")
+        let back = try JSONDecoder().decode(SpeakingWork.self, from: JSONEncoder().encode(w))
+        XCTAssertEqual(back.day, "2000-01-01")
+        let old = try JSONDecoder().decode(ShadowAttempt.self, from: Data("""
+        {"id":"a","article":"x/y","sid":1,"text":"t","created":0,"seconds":2,"peakDb":-9,"silent":false,
+         "interrupted":false,"rate":1,"mode":"repeat"}
+        """.utf8))
+        XCTAssertNil(old.day)
+        XCTAssertEqual(old.dayKey, DayKey.of(Date(timeIntervalSinceReferenceDate: 0)))
+    }
+
     func testDayKeysAndQuietHours() {
         XCTAssertEqual(DayKey.weekStart("2026-09-27"), "2026-09-21")
         XCTAssertEqual(DayKey.weekStart("2026-09-28"), "2026-09-28")

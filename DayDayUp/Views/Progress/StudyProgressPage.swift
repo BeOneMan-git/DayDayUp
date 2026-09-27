@@ -142,7 +142,7 @@ struct ProgressWeekListCard: View {
             days.insert(q.day)
         }
         for w in practice.state.speaking where !w.silent {
-            days.insert(DayKey.of(w.created))
+            days.insert(w.dayKey)
         }
         for w in practice.state.writing {
             for v in w.versions {
@@ -150,7 +150,7 @@ struct ProgressWeekListCard: View {
             }
         }
         for s in practice.state.shadow where !s.silent {
-            days.insert(DayKey.of(s.created))
+            days.insert(s.dayKey)
         }
         let mondays = Set(days.map { DayKey.weekStart($0) })
         return Array(mondays.filter { $0 < thisMonday }.sorted(by: >).prefix(8))

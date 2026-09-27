@@ -160,7 +160,7 @@ struct VocabBrowseView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
+                        .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -463,9 +463,8 @@ private struct VocabBrowseRow: View {
                 Text(item.gloss.isEmpty ? "还没有中文义" : item.gloss)
                     .font(.callout)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
                 if hasBadges {
-                    HStack(spacing: 6) {
+                    FlowLayout(spacing: 6, lineSpacing: 6) {
                         if item.archived {
                             Badge(text: "已暂停", outlined: true)
                         } else {
@@ -482,7 +481,7 @@ private struct VocabBrowseRow: View {
                 Image(systemName: item.starred ? "star.fill" : "star")
                     .font(.title3)
                     .foregroundStyle(item.starred ? Theme.warn : Color.secondary)
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
@@ -520,7 +519,6 @@ private struct VocabKnownHistoryView: View {
                                 Text(meaning)
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
-                                    .lineLimit(1)
                             }
                         }
                         Spacer(minLength: 8)

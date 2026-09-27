@@ -309,10 +309,15 @@ struct ChunkSelectionBar: View {
                 .accessibilityHidden(true)
             Text(session.chunkAnchor == nil ? "自选词群：点第一个词" : "再点最后一个词（同一句里）")
                 .font(.callout.weight(.medium))
-            Spacer()
-            Button("取消") { session.cancelChunkSelection() }
-                .buttonStyle(.bordered)
-                .frame(minHeight: 44)
+            Spacer(minLength: 8)
+            Button {
+                session.cancelChunkSelection()
+            } label: {
+                Text("取消")
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel("取消选词群")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 6)

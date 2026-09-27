@@ -209,13 +209,13 @@ struct BaselineSpeakingView: View {
     private func takeCard(_ work: SpeakingWork) -> some View {
         let playing = player.playing == .mine
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+            AdaptiveStack(spacing: 12) {
                 Text("这次说了 \(Int(work.speakSeconds.rounded())) 秒")
                     .font(.headline)
                 if work.interrupted {
                     Badge(text: "被打断", color: Theme.warn, outlined: true)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 Button {
                     togglePlayback(work)
                 } label: {
@@ -226,7 +226,7 @@ struct BaselineSpeakingView: View {
                 .disabled(practice.recordingURL(work.file) == nil)
             }
             if work.silent {
-                Text("只录到静音。看看麦克风有没有被挡住，再录一次。")
+                Label("只录到静音。看看麦克风有没有被挡住，再录一次。", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(Theme.warn)
             }
         }
@@ -413,12 +413,14 @@ struct BaselineYesNoRow: View {
     @Binding var value: Bool?
 
     var body: some View {
-        HStack(spacing: 12) {
+        AdaptiveStack(spacing: 12) {
             Text(question)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            choice("是", true)
-            choice("否", false)
+            HStack(spacing: 12) {
+                choice("是", true)
+                choice("否", false)
+            }
         }
         .accessibilityElement(children: .contain)
     }

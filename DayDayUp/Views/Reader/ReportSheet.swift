@@ -23,10 +23,9 @@ struct ReportSheet: View {
                         .font(Font.system(.body, design: .serif))
                 }
                 Section("哪里不对") {
-                    Picker("类型", selection: $kind) {
+                    ChoicePicker("类型", selection: $kind) {
                         ForEach(ReportSheet.kinds, id: \.self) { Text($0).tag($0) }
                     }
-                    .pickerStyle(.segmented)
                     TextField("说明（可以不写）", text: $note, axis: .vertical)
                         .lineLimit(2...6)
                 }

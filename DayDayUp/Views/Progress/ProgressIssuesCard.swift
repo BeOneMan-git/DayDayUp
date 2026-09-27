@@ -72,7 +72,7 @@ private struct ProgressIssueRow: View {
                 Text("你记下的证据（最近一次）：" + note)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .excerptLineLimit(2)
             }
         }
     }

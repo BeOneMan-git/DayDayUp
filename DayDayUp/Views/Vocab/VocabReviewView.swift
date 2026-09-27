@@ -275,7 +275,6 @@ struct VocabSpellingView: View {
                     Text(item.gloss)
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
             }
             Spacer()

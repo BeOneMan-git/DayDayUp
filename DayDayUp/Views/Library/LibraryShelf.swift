@@ -37,11 +37,12 @@ struct ShelfFilters: Equatable {
     var difficulties: Set<Int> = []
     var offline = false
     var calibration = false
+    var favorites = false
     var progress: ShelfProgress = .all
     var topic: String? = nil
 
     var isActive: Bool {
-        !difficulties.isEmpty || offline || calibration || progress != .all || topic != nil
+        !difficulties.isEmpty || offline || calibration || favorites || progress != .all || topic != nil
     }
 }
 
@@ -62,6 +63,7 @@ struct ShelfEntry: Identifiable, Equatable {
     var offline: Bool             // text, audio and timing are all on this iPad
     var calibration: Bool         // the learner reported "音频对不上" (待校准)
     var quizAvailable: Bool
+    var favorite: Bool
 
     var id: String { item.id }
     var ref: ArticleRef { item.ref }
@@ -102,7 +104,8 @@ enum ShelfIndex {
                 let offline = res.text == .available && res.audio == .available && res.timing == .available
                 out.append(ShelfEntry(item: item, difficulty: study.difficulty(item.ref), listen: listen, read: read,
                                       stages: stages, offline: offline, calibration: calibration.contains(key),
-                                      quizAvailable: res.quiz == .available))
+                                      quizAvailable: res.quiz == .available,
+                                      favorite: study.state.favorites[key] != nil))
             }
         }
         return out
@@ -198,6 +201,7 @@ enum ShelfIndex {
         if !filters.difficulties.isEmpty && !filters.difficulties.contains(e.difficulty ?? 0) { return false }
         if filters.offline && !e.offline { return false }
         if filters.calibration && !e.calibration { return false }
+        if filters.favorites && !e.favorite { return false }
         switch filters.progress {
         case .all:
             break

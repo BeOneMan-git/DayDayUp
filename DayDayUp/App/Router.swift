@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 enum AppTab: Hashable {
     case today, library, shadow, ielts, vocab, progress, settings
@@ -22,6 +23,48 @@ final class Router {
     /// 今日 asked the 词汇 tab to show its 复习 page (V0.5).
     private(set) var vocabReviewPending = false
     private(set) var vocabReviewRequestID = 0
+
+    /// 专注模式 in the reader (SYS-P01): only the text and the player stay. Kept for this run of the app only.
+    var readerFocus = false
+    /// The learner closed the reader's side panel in a wide window. It then stays closed by default until they
+    /// open it again (this run of the app only).
+    var inspectorClosedByLearner = false
+    /// A text field or text view is being edited somewhere in the app (PLAT-09, ACC-24). While it is,
+    /// single-key shortcuts (space, arrows, L) are off, so typing never starts playback or recording.
+    private(set) var isEditingText = false
+
+    @ObservationIgnored private var editingObjects: Set<ObjectIdentifier> = []
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
+
+    init() {
+        let names: [(Notification.Name, Bool)] = [
+            (UITextField.textDidBeginEditingNotification, true),
+            (UITextField.textDidEndEditingNotification, false),
+            (UITextView.textDidBeginEditingNotification, true),
+            (UITextView.textDidEndEditingNotification, false),
+        ]
+        for (name, begins) in names {
+            let token = NotificationCenter.default.addObserver(forName: name, object: nil,
+                                                               queue: .main) { [weak self] note in
+                let id: ObjectIdentifier? = note.object.map { ObjectIdentifier($0 as AnyObject) }
+                MainActor.assumeIsolated {
+                    self?.textEditing(id, begins: begins)
+                }
+            }
+            observers.append(token)
+        }
+    }
+
+    private func textEditing(_ id: ObjectIdentifier?, begins: Bool) {
+        guard let id else { return }
+        if begins {
+            editingObjects.insert(id)
+        } else {
+            editingObjects.remove(id)
+        }
+        let editing = !editingObjects.isEmpty
+        if editing != isEditingText { isEditingText = editing }
+    }
 
     func openArticle(_ ref: ArticleRef) {
         tab = .library

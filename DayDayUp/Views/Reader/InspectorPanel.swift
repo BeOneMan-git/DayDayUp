@@ -7,12 +7,11 @@ struct InspectorPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("面板", selection: Bindable(session).inspectorTab) {
+            ChoicePicker("面板", selection: Bindable(session).inspectorTab) {
                 ForEach(InspectorTab.allCases, id: \.self) { tab in
                     Text(tab.title).tag(tab)
                 }
             }
-            .pickerStyle(.segmented)
             .padding(12)
             Divider()
             ScrollView {
@@ -65,21 +64,19 @@ struct WordCardView: View {
         let accent = user.settings.accent
 
         VStack(alignment: .leading, spacing: 14) {
-            // Headword and actions
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(card != nil && !lemma.isEmpty ? lemma : t.w)
-                        .font(Font.system(.largeTitle, design: .serif).weight(.semibold))
-                    if card != nil, !lemma.isEmpty, lemma.lowercased() != t.w.lowercased() {
-                        Text("文中词形：\(t.w)")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+            // Headword, then the actions below it: the panel is narrow and text can be very large.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card != nil && !lemma.isEmpty ? lemma : t.w)
+                    .font(Font.system(.largeTitle, design: .serif).weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
+                if card != nil, !lemma.isEmpty, lemma.lowercased() != t.w.lowercased() {
+                    Text("文中词形：\(t.w)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-                Spacer()
-                if let key = t.k, entry?.num != true {
-                    wordActions(key, info: info)
-                }
+            }
+            if let key = t.k, entry?.num != true {
+                wordActions(key, info: info)
             }
 
             // Badges
@@ -160,34 +157,38 @@ struct WordCardView: View {
 
     private func wordActions(_ key: String, info: TokInfo) -> some View {
         let saved = vocab.items(forKey: key)
-        return VStack(alignment: .trailing, spacing: 8) {
-            HStack(spacing: 8) {
-                Button {
-                    if let ref = session.ref {
-                        senseTarget = SenseTarget(ref: ref, sid: info.sid, tokIndex: info.tok.i, key: key, word: info.tok.w)
-                    }
-                } label: {
-                    Label(saved.isEmpty ? "收藏这个义项" : "已收藏 \(saved.count) 个义项",
-                          systemImage: saved.isEmpty ? "bookmark" : "bookmark.fill")
+        let known = user.isKnown(key)
+        return FlowLayout(spacing: 8, lineSpacing: 8) {
+            Button {
+                if let ref = session.ref {
+                    senseTarget = SenseTarget(ref: ref, sid: info.sid, tokIndex: info.tok.i, key: key, word: info.tok.w)
                 }
-                .buttonStyle(.bordered)
-                .tint(saved.isEmpty ? Color.secondary : Theme.level5)
-                Button {
-                    session.toggleKnown(key)
-                } label: {
-                    Label("认识", systemImage: user.isKnown(key) ? "checkmark.circle.fill" : "checkmark.circle")
-                }
-                .buttonStyle(.bordered)
-                .tint(user.isKnown(key) ? Color.green : Color.secondary)
-                .help("只作标记，不排复习")
+            } label: {
+                Label(saved.isEmpty ? "收藏这个义项" : "已收藏 \(saved.count) 个义项",
+                      systemImage: saved.isEmpty ? "bookmark" : "bookmark.fill")
+                    .frame(minHeight: 44)
             }
+            .buttonStyle(.bordered)
+            .tint(saved.isEmpty ? Color.secondary : Theme.level5)
+            Button {
+                session.toggleKnown(key)
+            } label: {
+                Label(known ? "已标认识" : "认识", systemImage: known ? "checkmark.circle.fill" : "checkmark.circle")
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.bordered)
+            .tint(known ? Theme.level5 : Color.secondary)
+            .help("只作标记，不排复习")
+            .accessibilityHint(known ? "再点一次取消认识" : "只作标记，不排复习")
             Button {
                 session.startChunkSelection(from: info.tok.i)
             } label: {
                 Label("从这个词开始选词群", systemImage: "text.badge.plus")
+                    .font(.callout)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .font(.callout)
         }
         .controlSize(.regular)
     }
@@ -201,11 +202,13 @@ struct WordCardView: View {
                 Image(systemName: "speaker.wave.2").font(.caption)
             }
             .padding(.horizontal, 10)
-            .frame(minHeight: 36)
+            .frame(minHeight: 44)
             .background(Theme.chip, in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(label) \(text ?? "")")
+        .accessibilityLabel("\(label) \(text ?? "")" + (ai ? "，补注" : ""))
+        .accessibilityHint("播放读音")
     }
 }
 
@@ -234,9 +237,9 @@ struct AnnotationNotes: View {
                         } label: {
                             Label(saved ? "已在词群库（再加一句语境）" : "收藏为词群",
                                   systemImage: saved ? "checkmark.circle" : "plus.circle")
+                                .frame(minHeight: 44)
                         }
                         .buttonStyle(.bordered)
-                        .frame(minHeight: 44)
                     }
                 }
             case "e":
@@ -324,19 +327,22 @@ struct SentenceButtons: View {
     let sid: Int
     var showAnalysis = false
 
+    /// Play, loop, 跟读 and 句子解析, each at least 44 pt high; they wrap in a narrow panel.
     var body: some View {
         let timed = session.sentence(sid)?.isTimed ?? false
-        HStack(spacing: 8) {
+        FlowLayout(spacing: 8, lineSpacing: 8) {
             if timed {
                 Button {
                     session.playSentence(sid)
                 } label: {
                     Label("从本句播放", systemImage: "play.fill")
+                        .frame(minHeight: 44)
                 }
                 Button {
                     session.loopSentence(sid)
                 } label: {
                     Label("循环本句", systemImage: "repeat.1")
+                        .frame(minHeight: 44)
                 }
                 Button {
                     if let ref = session.ref {
@@ -345,6 +351,7 @@ struct SentenceButtons: View {
                     }
                 } label: {
                     Label("跟读", systemImage: "waveform")
+                        .frame(minHeight: 44)
                 }
             }
             if showAnalysis {
@@ -352,11 +359,12 @@ struct SentenceButtons: View {
                     session.showSentence(sid)
                 } label: {
                     Label("句子解析", systemImage: "text.magnifyingglass")
+                        .frame(minHeight: 44)
                 }
             }
         }
         .buttonStyle(.bordered)
-        .controlSize(.small)
+        .font(.callout)
     }
 }
 
@@ -400,6 +408,8 @@ struct SentencePanel: View {
                     reportSid = s.id
                 } label: {
                     Label("报错", systemImage: "exclamationmark.bubble")
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.borderless)
                 .font(.callout)
@@ -452,15 +462,22 @@ struct SentencePanel: View {
                             } label: {
                                 HStack(spacing: 6) {
                                     Circle().fill(Theme.level(w.band)).frame(width: 8, height: 8)
+                                        .accessibilityHidden(true)
+                                    Text("\(w.band)级")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(Theme.level(w.band))
                                     Text(w.key).bold()
-                                    Text(w.meaning).foregroundStyle(.secondary).lineLimit(1)
+                                    Text(w.meaning).foregroundStyle(.secondary)
                                 }
                                 .font(.callout)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 6)
+                                .frame(minHeight: 44)
                                 .background(Theme.chip, in: RoundedRectangle(cornerRadius: 8))
+                                .contentShape(RoundedRectangle(cornerRadius: 8))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityHint("在正文里找到这个词")
                         }
                     }
                 }
@@ -494,8 +511,9 @@ struct SentencePanel: View {
                             }
                         }
                         .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                         .background(Theme.chip.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+                        .contentShape(RoundedRectangle(cornerRadius: 8))
                     }
                     .buttonStyle(.plain)
                 }
@@ -564,30 +582,25 @@ struct VocabListPanel: View {
         let shown = sorted(rows.filter { matches($0) })
 
         VStack(alignment: .leading, spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(filters, id: \.0) { key, label in
-                        Button {
-                            filter = key
-                        } label: {
-                            Text("\(label) \(counts[key] ?? 0)")
-                                .font(.callout)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(filter == key ? Theme.accent.opacity(0.18) : Theme.chip,
-                                            in: Capsule())
-                        }
-                        .buttonStyle(.plain)
-                    }
+            FlowLayout(spacing: 6, lineSpacing: 6) {
+                ForEach(filters, id: \.0) { key, label in
+                    filterChip(key, label: label, count: counts[key] ?? 0)
                 }
             }
-            HStack {
+            FlowLayout(spacing: 8, lineSpacing: 4) {
                 Text("本文 5 级+ 词 \(rows.count) 个 · 已认识 \(counts["known"] ?? 0)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Spacer()
-                Button(byLevel ? "按等级" : "按出现顺序") { byLevel.toggle() }
-                    .font(.footnote)
+                Button {
+                    byLevel.toggle()
+                } label: {
+                    Label(byLevel ? "排序：按等级" : "排序：按出现顺序", systemImage: "arrow.up.arrow.down")
+                        .font(.footnote)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityHint(byLevel ? "点一下改为按出现顺序" : "点一下改为按等级")
             }
             if shown.isEmpty {
                 Text("这个筛选下没有词。").foregroundStyle(.secondary)
@@ -597,25 +610,85 @@ struct VocabListPanel: View {
                     Button {
                         session.reveal(row.tokIndex)
                     } label: {
-                        HStack(spacing: 10) {
-                            Circle().fill(Theme.level(row.band)).frame(width: 9, height: 9)
-                            Text(row.key + (session.isSaved(row.key) ? " ★" : ""))
-                                .font(.body.weight(.semibold))
-                            Text(meaning(row))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.vertical, 10)
-                        .opacity(user.isKnown(row.key) ? 0.45 : 1)
-                        .contentShape(Rectangle())
+                        wordRow(row)
                     }
                     .buttonStyle(.plain)
                     Divider()
                 }
             }
         }
+    }
+
+    /// The chosen filter has a check mark and a frame, not only a colour.
+    private func filterChip(_ key: String, label: String, count: Int) -> some View {
+        let selected = filter == key
+        return Button {
+            filter = key
+        } label: {
+            HStack(spacing: 4) {
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.caption.weight(.bold))
+                        .accessibilityHidden(true)
+                }
+                Text("\(label) \(count)")
+            }
+                .font(.callout.weight(selected ? .semibold : .regular))
+                .padding(.horizontal, 10)
+                .frame(minHeight: 44)
+                .background(selected ? Theme.accent.opacity(0.18) : Theme.chip, in: Capsule())
+                .overlay {
+                    if selected {
+                        Capsule().strokeBorder(Theme.accent, lineWidth: 1.5)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// Level as a dot and as text; a known word says so in words (it is also dimmed).
+    private func wordRow(_ row: VocabRow) -> some View {
+        let known = user.isKnown(row.key)
+        let saved = session.isSaved(row.key)
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Circle().fill(Theme.level(row.band)).frame(width: 9, height: 9)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(row.key + (saved ? " ★" : ""))
+                        .font(.body.weight(.semibold))
+                    Text("\(row.band)级")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Theme.level(row.band))
+                    if known {
+                        Label("已认识", systemImage: "checkmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(meaning(row))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 10)
+        .frame(minHeight: 44)
+        .opacity(known ? 0.55 : 1)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(rowSpoken(row, known: known, saved: saved))
+    }
+
+    private func rowSpoken(_ row: VocabRow, known: Bool, saved: Bool) -> String {
+        var parts = [row.key, "\(row.band)级"]
+        if saved { parts.append("已收藏") }
+        if known { parts.append("已认识") }
+        let m = meaning(row)
+        if !m.isEmpty { parts.append(m) }
+        return parts.joined(separator: "，")
     }
 
     private func isTrap(_ row: VocabRow) -> Bool {

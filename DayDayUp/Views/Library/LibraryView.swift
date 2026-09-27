@@ -13,7 +13,6 @@ struct LibraryView: View {
     @State private var filters = ShelfFilters()
     @State private var sheet: ShelfSheet?
     @State private var showImporter = false
-    @State private var showMessage = false
 
     /// Sheets opened from a row's context menu.
     enum ShelfSheet: Identifiable {
@@ -35,16 +34,7 @@ struct LibraryView: View {
             .navigationTitle("书架")
             .searchable(text: $query, prompt: "搜索标题、期号、栏目、主题")
             .toolbar { toolbarContent(topics: ShelfIndex.topics(entries)) }
-            .overlay { importOverlay }
-            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.ecopack, .data],
-                          allowsMultipleSelection: true) { result in
-                importPicked(result)
-            }
-            .alert("内容包", isPresented: $showMessage) {
-                Button("好") {}
-            } message: {
-                Text(packs.lastMessage ?? "")
-            }
+            .packImportFlow(isPresented: $showImporter)
             .sheet(item: $sheet) { s in
                 sheetContent(s)
             }
@@ -58,6 +48,8 @@ struct LibraryView: View {
 
     private func shelfList(entries: [ShelfEntry], sections: [ShelfSection]) -> some View {
         List {
+            // Packs waiting in the app's folder (IMP-F04): a preview first, never a silent install.
+            InboxImportBanner()
             if packs.packs.isEmpty {
                 emptyState
             } else {
@@ -111,6 +103,11 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func rowMenu(_ entry: ShelfEntry) -> some View {
+        Button {
+            study.toggleFavorite(entry.ref)
+        } label: {
+            Label(entry.favorite ? "取消收藏" : "收藏", systemImage: entry.favorite ? "star.slash" : "star")
+        }
         Menu {
             ArticleDifficultyMenu(ref: entry.ref)
         } label: {
@@ -202,6 +199,7 @@ struct LibraryView: View {
             Section("资源与校准") {
                 Toggle("可离线（正文、原音、时间轴都在）", isOn: $filters.offline)
                 Toggle("待校准（报过“音频对不上”）", isOn: $filters.calibration)
+                Toggle("已收藏", isOn: $filters.favorites)
             }
             Picker("听读进度", selection: $filters.progress) {
                 ForEach(ShelfProgress.allCases) { p in
@@ -253,6 +251,9 @@ struct LibraryView: View {
             }
             if filters.calibration {
                 chip("待校准") { filters.calibration = false }
+            }
+            if filters.favorites {
+                chip("已收藏") { filters.favorites = false }
             }
             if filters.progress != .all {
                 chip(filters.progress.title) { filters.progress = .all }
@@ -336,33 +337,10 @@ struct LibraryView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label("还没有内容包", systemImage: "books.vertical")
                 .font(.headline)
-            Text("点右上角的“导入内容包”，选 .ecopack 文件。也可以在“文件”App 里点一下内容包，或者把它放进“我的 iPad › DayDayUp”文件夹，打开 App 时会自动导入。")
+            Text("点右上角的“导入内容包”，选 .ecopack 文件。也可以在“文件”App 里点一下内容包，或者把它放进“我的 iPad › DayDayUp”文件夹：书架顶上会提示，先看预览，确认后才导入。")
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 8)
-    }
-
-    // MARK: Import
-
-    @ViewBuilder
-    private var importOverlay: some View {
-        if packs.isImporting {
-            ProgressView("正在导入…")
-                .padding(24)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-        }
-    }
-
-    private func importPicked(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result else { return }
-        Task {
-            var messages: [String] = []
-            for url in urls {
-                messages.append(await packs.importPack(from: url))
-            }
-            packs.lastMessage = messages.joined(separator: "\n")
-            showMessage = true
-        }
     }
 }
 
@@ -407,6 +385,10 @@ struct ShelfRow: View {
 
     private var tagLine: some View {
         FlowLayout(spacing: 6, lineSpacing: 4) {
+            if entry.favorite {
+                Label("已收藏", systemImage: "star.fill")
+                    .foregroundStyle(Theme.accent)
+            }
             Text(ArticleDifficultyText.label(entry.difficulty))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)

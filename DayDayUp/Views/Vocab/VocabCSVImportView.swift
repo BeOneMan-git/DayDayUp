@@ -188,7 +188,6 @@ struct VocabCSVImportView: View {
                             Text(c.meaning)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
-                                .lineLimit(1)
                         }
                         if c.known {
                             Text("旧标记：认识（只作历史）")

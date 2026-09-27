@@ -314,7 +314,7 @@ struct ProgressChainView: View {
                 .fixedSize()
             Text(text)
                 .font(.callout)
-                .lineLimit(limit)
+                .excerptLineLimit(limit)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let playID {
                 RecordingPlayButton(id: playID, file: file, playback: playback)

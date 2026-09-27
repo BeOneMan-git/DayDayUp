@@ -168,7 +168,6 @@ private struct ProgressQuizRows: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(ProgressFormat.short(r.day) + " · " + (titles[r.article] ?? r.article))
-                            .lineLimit(2)
                         Spacer(minLength: 12)
                         Text("\(r.correct)/\(r.total)")
                             .monospacedDigit()

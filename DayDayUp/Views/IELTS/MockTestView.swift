@@ -192,7 +192,7 @@ struct MockTestView: View {
                 Image(systemName: m.isComplete ? "checkmark.seal" : "exclamationmark.triangle")
                     .font(.title3)
                     .foregroundStyle(m.isComplete ? Theme.accent : Theme.warn)
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -374,12 +374,11 @@ struct MockTestView: View {
     /// Part 2: the cue card, 1 minute to prepare with notes, then the talk.
     @ViewBuilder
     private func part2Step(_ card: CueCard) -> some View {
-        HStack(spacing: 8) {
+        FlowLayout(spacing: 8, lineSpacing: 6) {
             Badge(text: "Part 2", color: Theme.accent)
             Text("准备 1 分钟 · 陈述 1–2 分钟")
                 .font(.callout)
                 .foregroundStyle(.secondary)
-            Spacer()
         }
         CueCardPanel(card: card)
         switch step {
@@ -431,7 +430,7 @@ struct MockTestView: View {
                 .controlSize(.large)
             } else {
                 Part2TalkStatus(elapsed: recorder.elapsed)
-                HStack(spacing: 12) {
+                FlowLayout(spacing: 12, lineSpacing: 12) {
                     Button {
                         roundingShown = true
                     } label: {
@@ -560,7 +559,7 @@ struct MockTestView: View {
             } label: {
                 Image(systemName: playingThis ? "stop.circle" : "play.circle")
                     .font(.title2)
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
             }
             .buttonStyle(.plain)
             .disabled(practice.recordingURL(w.file) == nil || recorder.isRecording)
@@ -576,6 +575,7 @@ struct MockTestView: View {
                     if w.interrupted { Badge(text: "被打断", color: Theme.warn, outlined: true) }
                     if w.silent { Badge(text: "只录到静音", color: Theme.warn, outlined: true) }
                 }
+                RecordingGoneBadge(file: w.file)
                 if let n = w.notes, !n.isEmpty {
                     Text("笔记：\(n)")
                         .font(.caption)

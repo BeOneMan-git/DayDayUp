@@ -133,6 +133,7 @@ struct ProgressDisclosure<Content: View>: View {
     let title: String
     let content: Content
     @State private var expanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(_ title: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -142,7 +143,8 @@ struct ProgressDisclosure<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                // Reduce Motion: open and close without the animation.
+                withAnimation(reduceMotion ? nil : Animation.easeInOut(duration: 0.2)) { expanded.toggle() }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")

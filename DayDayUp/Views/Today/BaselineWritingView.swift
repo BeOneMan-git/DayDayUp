@@ -78,7 +78,7 @@ struct BaselineWritingView: View {
 
     private var promptCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            FlowLayout(spacing: 8, lineSpacing: 6) {
                 Badge(text: "10 分钟", outlined: true)
                 Badge(text: "不给提示和参考", outlined: true)
             }

@@ -68,14 +68,13 @@ struct DayDayUpApp: App {
                 .environment(recorder)
                 .environment(router)
                 .tint(Theme.accent)
-                .onOpenURL { url in
-                    guard url.isFileURL else { return }
-                    Task {
-                        _ = await packs.importPack(from: url)
-                        router.tab = .library
-                    }
+                .appAppearance(user.settings.appearance)
+                // A pack opened with the app leads to the import preview; nothing is installed without it.
+                .packOpenURLImport(packs: packs) {
+                    router.tab = .library
                 }
                 .task {
+                    // Only finds waiting packs (the banner on 书架 and 设置 offers the preview).
                     await packs.scanInbox()
                 }
         }

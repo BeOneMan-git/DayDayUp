@@ -329,7 +329,7 @@ struct Task1Figure: View {
                 HStack(alignment: .center, spacing: 12) {
                     Text("\(i + 1)")
                         .font(.headline.monospacedDigit())
-                        .frame(width: 32, height: 32)
+                        .frame(minWidth: 32, minHeight: 32)
                         .overlay(Circle().strokeBorder(Theme.accent, lineWidth: 2))
                     Text(step)
                         .frame(maxWidth: .infinity, alignment: .leading)

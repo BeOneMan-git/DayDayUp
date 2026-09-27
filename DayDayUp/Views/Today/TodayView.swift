@@ -88,12 +88,11 @@ struct TodayView: View {
 
     private var budgetControl: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker("每天学习时间", selection: budgetChoice) {
+            ChoicePicker("每天学习时间", selection: budgetChoice) {
                 Text("60 分钟").tag(TodayBudgetChoice.sixty)
                 Text("90 分钟").tag(TodayBudgetChoice.ninety)
                 Text(customBudgetTitle).tag(TodayBudgetChoice.custom)
             }
-            .pickerStyle(.segmented)
             .controlSize(.large)
             .frame(maxWidth: 440)
             Text("改了以后，今天的计划会重新排；已完成的任务保留。")
@@ -142,10 +141,11 @@ struct TodayView: View {
     }
 
     private var backupBanner: some View {
-        HStack(spacing: 12) {
+        AdaptiveStack(spacing: 12) {
             Image(systemName: "externaldrive.badge.exclamationmark")
                 .font(.title2)
                 .foregroundStyle(Theme.warn)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(user.daysSinceBackup.map { "已经 \($0) 天没有备份" } ?? "还没有备份过学习记录")
                     .font(.headline)
@@ -153,22 +153,29 @@ struct TodayView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            Button("去备份") { router.tab = .settings }
-                .buttonStyle(.borderedProminent)
+            Spacer(minLength: 8)
+            Button {
+                router.tab = .settings
+            } label: {
+                Text("去备份")
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.borderedProminent)
         }
         .padding(16)
         .background(Theme.warn.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private func nowPlaying(_ art: Article) -> some View {
-        HStack(spacing: 14) {
+        AdaptiveStack(spacing: 14) {
             Button {
                 session.togglePlay()
             } label: {
                 Image(systemName: engine.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 40))
                     .foregroundStyle(Theme.accent)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(engine.isPlaying ? "暂停" : "播放")
@@ -182,10 +189,15 @@ struct TodayView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            Spacer(minLength: 8)
             if let ref = session.ref {
-                Button("回到原文") { router.openArticle(ref) }
-                    .buttonStyle(.bordered)
+                Button {
+                    router.openArticle(ref)
+                } label: {
+                    Text("回到原文")
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.bordered)
             }
         }
         .padding(16)
@@ -205,10 +217,11 @@ struct TodayView: View {
 
     private func weeklyCard(_ week: String) -> some View {
         let range = BaselineContent.shortDay(week) + "–" + BaselineContent.shortDay(DayKey.adding(6, to: week))
-        return HStack(spacing: 12) {
+        return AdaptiveStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass")
                 .font(.title2)
                 .foregroundStyle(Theme.accent)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("上周（\(range)）的周报已准备好")
                     .font(.headline)
@@ -217,7 +230,7 @@ struct TodayView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: 8)
             Button {
                 route = .weekly(week)
             } label: {
@@ -392,14 +405,13 @@ struct TodayView: View {
     @ViewBuilder
     private var continueRow: some View {
         if let key = user.state.lastArticle, let ref = ArticleRef(key: key), let item = packs.item(ref) {
-            HStack(spacing: 14) {
+            AdaptiveStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("继续听读")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(item.meta.title)
                         .font(Font.system(.headline, design: .serif))
-                        .lineLimit(2)
                     if let pos = user.state.positions[key], pos > 1 {
                         Text("上次停在 \(formatTime(pos)) / \(formatTime(item.meta.dur))")
                             .font(.caption)
@@ -443,7 +455,7 @@ struct TodayView: View {
         case .shadow(let issue, let id, _):
             let key = ArticleRef(issue: issue, id: id).key
             let today = DayKey.today
-            let started = practice.state.shadow.contains { $0.article == key && DayKey.of($0.created) == today }
+            let started = practice.state.shadow.contains { $0.article == key && $0.dayKey == today }
             return started ? "继续" : "开始"
         case .writing(let promptId):
             return practice.state.writing.contains { $0.promptId == promptId && $0.isDraft } ? "继续" : "开始"

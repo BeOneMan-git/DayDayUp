@@ -94,7 +94,6 @@ struct ProgressRecordingsCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(groupTitle(g, sample: last))
                     .font(.callout.weight(.semibold))
-                    .lineLimit(2)
                 ProgressRecordingRow(item: ProgressRecordingItem.shadow(first, role: "第一次"), playback: playback)
                 if g.takes.count > 1 {
                     ProgressRecordingRow(item: ProgressRecordingItem.shadow(last, role: "最近一次"), playback: playback)
@@ -185,7 +184,7 @@ struct ProgressRecordingRow: View {
                     .font(.subheadline.weight(.semibold))
                 Text(item.text)
                     .font(.callout)
-                    .lineLimit(2)
+                    .excerptLineLimit(2)
                 Text(item.conditions)
                     .font(.caption)
                     .foregroundStyle(.secondary)

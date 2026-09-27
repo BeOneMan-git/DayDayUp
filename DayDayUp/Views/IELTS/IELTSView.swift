@@ -24,18 +24,16 @@ struct IELTSView: View {
     var body: some View {
         List {
             Section {
-                Picker("类型", selection: $mode) {
+                ChoicePicker("类型", selection: $mode) {
                     ForEach(Mode.allCases) { m in
                         Text(m.title).tag(m)
                     }
                 }
-                .pickerStyle(.segmented)
-                Picker("训练", selection: $track) {
+                ChoicePicker("训练", selection: $track) {
                     ForEach(Track.allCases) { t in
                         Text(t.title).tag(t)
                     }
                 }
-                .pickerStyle(.segmented)
                 Text(introText)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -214,7 +212,6 @@ struct IELTSView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(serif ? Font.system(.body, design: .serif) : .body.weight(.semibold))
-                    .lineLimit(4)
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -17,7 +17,7 @@ struct ShadowView: View {
     @Environment(PlaybackEngine.self) private var engine
     @Environment(Router.self) private var router
     @Environment(\.openURL) private var openURL
-    @ScaledMetric(relativeTo: .title2) private var baseFontSize: CGFloat = 24
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var ref: ArticleRef?
     @State private var article: Article?
@@ -186,13 +186,14 @@ struct ShadowView: View {
 
     private func header(_ art: Article, _ ref: ArticleRef, _ seg: ShadowSegment) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+            AdaptiveStack(spacing: 12, rowAlignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(art.issue) · \(art.section)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Text(art.title)
                         .font(Font.system(.title3, design: .serif).weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
                 }
                 Spacer(minLength: 8)
                 Button {
@@ -204,12 +205,11 @@ struct ShadowView: View {
                 .controlSize(.large)
                 .disabled(recordingHere)
             }
-            Picker("练习模式", selection: modeBinding) {
+            ChoicePicker("练习模式", selection: modeBinding) {
                 ForEach(ShadowMode.allCases) { m in
                     Text(m.title).tag(m)
                 }
             }
-            .pickerStyle(.segmented)
             .controlSize(.large)
             .disabled(recorder.isBusy)
             Text("\(mode.english)：\(mode.detail)")
@@ -233,7 +233,7 @@ struct ShadowView: View {
         let available = packs.resources(ref).annotations == .available
         let on = annotations.layers(for: mode)
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
+            AdaptiveStack(spacing: 8) {
                 Text("发音标注")
                     .font(.subheadline.weight(.semibold))
                 Text("每个模式分别记住")
@@ -356,12 +356,11 @@ struct ShadowView: View {
             }
         case .shadowing:
             PracticeCard {
-                Picker("片段长度", selection: $shadowLength) {
+                ChoicePicker("片段长度", selection: $shadowLength) {
                     Text("1 句").tag(1)
                     Text("加长到 2 句").tag(2)
                     Text("加长到 3 句").tag(3)
                 }
-                .pickerStyle(.segmented)
                 .controlSize(.large)
                 .disabled(recorder.isBusy)
                 if speakerOut && !recordingHere {
@@ -374,11 +373,10 @@ struct ShadowView: View {
             }
         case .readAloud:
             PracticeCard {
-                Picker("朗读范围", selection: $readWhole) {
+                ChoicePicker("朗读范围", selection: $readWhole) {
                     Text("这一句").tag(false)
                     Text("这一段").tag(true)
                 }
-                .pickerStyle(.segmented)
                 .controlSize(.large)
                 .disabled(recorder.isBusy)
                 Text("先不放原音，看着文字自己读。读完可以听原音对照，或者做 A/B。")
@@ -463,13 +461,12 @@ struct ShadowView: View {
         let words = retellKeywords(seg.sents)
         let question = retellFollowUp(key: followKey(seg))
         PracticeCard {
-            Picker("复述范围", selection: $retellSpan) {
+            ChoicePicker("复述范围", selection: $retellSpan) {
                 Text("这一段").tag(0)
                 Text("1 句").tag(1)
                 Text("2 句").tag(2)
                 Text("3 句").tag(3)
             }
-            .pickerStyle(.segmented)
             .controlSize(.large)
             .disabled(retellStep != .prepare || recorder.isBusy)
             retellSteps
@@ -640,38 +637,71 @@ struct ShadowView: View {
     private func controlsBar(_ seg: ShadowSegment) -> some View {
         VStack(spacing: 0) {
             Divider()
+            controlsContent(seg)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+        }
+        .background(.bar)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("练习按钮")
+    }
+
+    /// One row with titles when it fits, then icons only (VoiceOver still reads the titles). At accessibility
+    /// text sizes the buttons keep their titles and wrap onto more rows instead (ACC-24).
+    @ViewBuilder
+    private func controlsContent(_ seg: ShadowSegment) -> some View {
+        if typeSize.isAccessibilitySize {
+            controlsWrapped(seg)
+        } else {
             ViewThatFits(in: .horizontal) {
                 controlsRow(seg)
                     .labelStyle(.titleAndIcon)
                 controlsRow(seg)
                     .labelStyle(.iconOnly)
+                controlsWrapped(seg)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
         }
-        .background(.bar)
     }
 
     private func controlsRow(_ seg: ShadowSegment) -> some View {
         HStack(spacing: 10) {
-            Button {
-                move(-1)
-            } label: {
-                Label(seg.isLong ? "上一段" : "上一句", systemImage: "backward.end.fill")
-            }
-            .disabled(seg.first <= 0 || recorder.isBusy)
+            previousButton(seg)
             Spacer(minLength: 8)
             modeButtons(seg)
             Spacer(minLength: 8)
-            Button {
-                move(1)
-            } label: {
-                Label(seg.isLong ? "下一段" : "下一句", systemImage: "forward.end.fill")
-            }
-            .disabled(seg.last >= sentences.count - 1 || recorder.isBusy)
+            nextButton(seg)
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
+    }
+
+    private func controlsWrapped(_ seg: ShadowSegment) -> some View {
+        FlowLayout(spacing: 10, lineSpacing: 10) {
+            previousButton(seg)
+            modeButtons(seg)
+            nextButton(seg)
+        }
+        .labelStyle(.titleAndIcon)
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+    }
+
+    private func previousButton(_ seg: ShadowSegment) -> some View {
+        Button {
+            move(-1)
+        } label: {
+            Label(seg.isLong ? "上一段" : "上一句", systemImage: "backward.end.fill")
+        }
+        .disabled(seg.first <= 0 || recorder.isBusy)
+    }
+
+    private func nextButton(_ seg: ShadowSegment) -> some View {
+        Button {
+            move(1)
+        } label: {
+            Label(seg.isLong ? "下一段" : "下一句", systemImage: "forward.end.fill")
+        }
+        .disabled(seg.last >= sentences.count - 1 || recorder.isBusy)
     }
 
     @ViewBuilder
@@ -944,7 +974,7 @@ struct ShadowView: View {
             } label: {
                 Image(systemName: playing ? "stop.circle" : "play.circle")
                     .font(.title2)
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -956,6 +986,7 @@ struct ShadowView: View {
                 Text(takeDetail(take))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                RecordingGoneBadge(file: take.file)
                 if !badges.isEmpty {
                     badgeFlow(badges)
                 }
@@ -1088,11 +1119,9 @@ struct ShadowView: View {
 
     private var articleKey: String { ref?.key ?? "" }
 
-    /// Reading size: the user's text size step, following Dynamic Type.
+    /// Reading size: the learner's English text size (18…34 pt), following Dynamic Type (UI-P01).
     private var fontSize: CGFloat {
-        let scale: [CGFloat] = [0.85, 1.0, 1.17, 1.33]
-        let step = min(max(user.settings.fontStep, 0), scale.count - 1)
-        return (baseFontSize * scale[step]).rounded()
+        Theme.readingPointSize(user.settings.fontSize, typeSize: typeSize)
     }
 
     /// The stretch of text this mode practises now.
@@ -1542,7 +1571,7 @@ struct ShadowView: View {
     // MARK: Text
 
     private var playerStatus: (text: String, icon: String) {
-        if recordingHere { return ("录音中", "record.circle") }
+        if recordingHere { return ("正在录音", "record.circle") }
         switch player.playing {
         case .original: return ("正在播放原音", "speaker.wave.2")
         case .mine: return ("正在播放你的录音", "person.wave.2")

@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct ParagraphStyle: Equatable {
-    var fontStep: Int
+    /// Reading size in pt after Dynamic Type (Theme.readingPointSize), so a change redraws every paragraph.
+    var fontSize: CGFloat
     var threshold: Int
     var showTrap: Bool
     var showPhrase: Bool
@@ -21,6 +22,8 @@ struct ParagraphHighlight: Equatable {
 
 /// One paragraph rendered as a single native Text.
 /// Every word is a link (ddu://t/<index>); the reader handles taps through the openURL action.
+/// A tap resolves to the one character under the finger, so neighbouring words never share a hit area; the
+/// spaces and punctuation between words carry no link (SYS-P02). A drag scrolls and never selects a word.
 struct ParagraphView: View, Equatable {
     let para: Para
     let index: Int
@@ -36,23 +39,23 @@ struct ParagraphView: View, Equatable {
     var body: some View {
         switch para.kind {
         case "h":
-            Text(attributed(font: Font.system(Theme.bodyStyle(style.fontStep), design: .serif).weight(.bold)))
+            Text(attributed(font: Theme.readingFont(size: style.fontSize, weight: .bold)))
                 .tint(Color.primary)
                 .padding(.top, 6)
                 .accessibilityAddTraits(.isHeader)
         case "rub":
             VStack(alignment: .leading, spacing: 6) {
-                Text(attributed(font: Theme.readingFont(style.fontStep).italic()))
-                    .lineSpacing(5)
+                Text(attributed(font: Theme.readingFont(size: style.fontSize).italic()))
+                    .lineSpacing(Theme.readingLineSpacing(style.fontSize) - 2)
                     .tint(Color.secondary)
                 translation
             }
         default:
-            HStack(alignment: .top, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 playButton
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(attributed(font: Theme.readingFont(style.fontStep)))
-                        .lineSpacing(7)
+                    Text(attributed(font: Theme.readingFont(size: style.fontSize)))
+                        .lineSpacing(Theme.readingLineSpacing(style.fontSize))
                         .tint(Color.primary)
                     translation
                 }
@@ -62,8 +65,10 @@ struct ParagraphView: View, Equatable {
 
     // MARK: Pieces
 
+    /// ▷ in the margin, 44 × 44 pt, its centre level with the middle of the first line at any text size.
     @ViewBuilder
     private var playButton: some View {
+        let lift = style.fontSize * 0.33
         if let first = para.sents.first(where: { $0.isTimed }) {
             Button {
                 session.playSentence(first.id)
@@ -71,11 +76,11 @@ struct ParagraphView: View, Equatable {
                 Image(systemName: "play.circle")
                     .font(.title3)
                     .foregroundStyle(.secondary)
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .offset(y: -9)
+            .alignmentGuide(.firstTextBaseline) { d in d[VerticalAlignment.center] + lift }
             .accessibilityLabel("从本段播放")
         } else {
             Color.clear.frame(width: 44, height: 1)
@@ -97,6 +102,8 @@ struct ParagraphView: View, Equatable {
             } label: {
                 Label(zhOpen ? "收起译文" : "译文", systemImage: "character.bubble")
                     .font(.caption)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
@@ -210,8 +217,9 @@ struct ArticleHeader: View {
                 .padding(.horizontal, titleOn ? 6 : 0)
                 .background(titleOn ? Theme.sentence : Color.clear, in: RoundedRectangle(cornerRadius: 6))
                 .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 16) {
+            FlowLayout(spacing: 16, lineSpacing: 4) {
                 Label(formatTime(article.dur), systemImage: "headphones")
+                    .accessibilityLabel("音频 \(spokenTime(article.dur))")
                 if let nw = meta?.nw { Text("\(nw) 词") }
                 if let ns = meta?.ns { Text("\(ns) 句") }
                 if let n5 = meta?.n5 { Text("5 级+ 词 \(n5) 个") }
@@ -219,7 +227,7 @@ struct ArticleHeader: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
             if let topics = meta?.topics, !topics.isEmpty {
-                HStack(spacing: 6) {
+                FlowLayout(spacing: 6, lineSpacing: 6) {
                     ForEach(topics, id: \.self) { Badge(text: $0) }
                 }
             }
@@ -237,6 +245,7 @@ struct BlindListeningView: View {
             Image(systemName: "ear")
                 .font(.system(size: 44))
                 .foregroundStyle(Theme.accent)
+                .accessibilityHidden(true)
             Text("盲听中")
                 .font(.title2.weight(.semibold))
             Text("先只听，不看文字。听完一遍，再点右上角的眼睛，看着原文再听一遍。")

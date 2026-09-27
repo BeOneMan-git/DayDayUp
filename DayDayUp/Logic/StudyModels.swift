@@ -237,13 +237,14 @@ struct StudyState: Codable, Equatable {
     var articleFinished: [String: Date] = [:]       // first time listening reached 90 % coverage (听读完成)
     var weeklyReports: [String: Date] = [:]         // week key (Monday) -> prepared
     var retractedIssues: [String] = []              // MET-06: issues the learner withdrew
+    var favorites: [String: Date] = [:]             // PAGE-02 收藏: article key -> when
     var lastPlanNote: String? = nil
 
     init() {}
 
     enum CodingKeys: String, CodingKey {
         case schema, settings, plans, baseline, retests, quizResults, articleDifficulty, articleOpened
-        case articleFinished, weeklyReports, retractedIssues, lastPlanNote
+        case articleFinished, weeklyReports, retractedIssues, lastPlanNote, favorites
     }
 
     init(from decoder: Decoder) throws {
@@ -260,6 +261,7 @@ struct StudyState: Codable, Equatable {
         weeklyReports = (try? c.decodeIfPresent([String: Date].self, forKey: .weeklyReports)) ?? [:]
         retractedIssues = (try? c.decodeIfPresent([String].self, forKey: .retractedIssues)) ?? []
         lastPlanNote = try? c.decodeIfPresent(String.self, forKey: .lastPlanNote)
+        favorites = (try? c.decodeIfPresent([String: Date].self, forKey: .favorites)) ?? [:]
     }
 }
 

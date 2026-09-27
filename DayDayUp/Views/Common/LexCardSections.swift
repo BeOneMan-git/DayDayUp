@@ -115,6 +115,7 @@ struct LexCardSections: View {
                         } label: {
                             Label("朗读例句", systemImage: "speaker.wave.2")
                                 .font(.callout)
+                                .frame(minHeight: 44)
                         }
                         .buttonStyle(.bordered)
                     }

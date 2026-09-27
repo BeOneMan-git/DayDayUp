@@ -102,7 +102,12 @@ final class PracticeStore {
     }
 
     func addShadow(_ attempt: ShadowAttempt) {
-        update { $0.shadow.append(attempt) }
+        var a = attempt
+        if a.day == nil {
+            a.day = DayKey.of(a.created)
+            a.tz = TimeZone.current.secondsFromGMT(for: a.created)
+        }
+        update { $0.shadow.append(a) }
     }
 
     // MARK: 口语
@@ -116,8 +121,13 @@ final class PracticeStore {
     }
 
     func addSpeaking(_ work: SpeakingWork) {
-        update { $0.speaking.append(work) }
-        onNewWork?("speaking", work.id)
+        var w = work
+        if w.day == nil {
+            w.day = DayKey.of(w.created)
+            w.tz = TimeZone.current.secondsFromGMT(for: w.created)
+        }
+        update { $0.speaking.append(w) }
+        onNewWork?("speaking", w.id)
     }
 
     func updateSpeaking(_ id: String, _ change: (inout SpeakingWork) -> Void) {
@@ -146,8 +156,13 @@ final class PracticeStore {
     }
 
     func addWriting(_ work: WritingWork) {
-        update { $0.writing.append(work) }
-        onNewWork?("writing", work.id)
+        var w = work
+        if w.day == nil {
+            w.day = DayKey.of(w.created)
+            w.tz = TimeZone.current.secondsFromGMT(for: w.created)
+        }
+        update { $0.writing.append(w) }
+        onNewWork?("writing", w.id)
     }
 
     func updateWriting(_ id: String, _ change: (inout WritingWork) -> Void) {
@@ -170,7 +185,12 @@ final class PracticeStore {
     }
 
     func addMock(_ mock: MockSession) {
-        update { $0.mocks.append(mock) }
+        var m = mock
+        if m.day == nil {
+            m.day = DayKey.of(m.created)
+            m.tz = TimeZone.current.secondsFromGMT(for: m.created)
+        }
+        update { $0.mocks.append(m) }
         saveNow()
     }
 
@@ -208,10 +228,10 @@ final class PracticeStore {
 
     func summary(for day: String) -> DaySummary {
         var out = DaySummary()
-        let takes = state.shadow.filter { DayKey.of($0.created) == day && !$0.silent }
+        let takes = state.shadow.filter { $0.dayKey == day && !$0.silent }
         out.shadowTakes = takes.count
         out.shadowSentences = Set(takes.map { "\($0.article)#\($0.sid)" }).count
-        out.speaking = state.speaking.filter { DayKey.of($0.created) == day && !$0.silent }.count
+        out.speaking = state.speaking.filter { $0.dayKey == day && !$0.silent }.count
         out.writing = state.writing.filter { work in
             work.versions.contains { v in v.finished.map { DayKey.of($0) == day } ?? false }
         }.count

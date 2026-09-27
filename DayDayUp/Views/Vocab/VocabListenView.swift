@@ -8,6 +8,8 @@ struct VocabListenView: View {
     @Environment(PackStore.self) private var packs
     @Environment(PlaybackEngine.self) private var engine
     @Environment(RecorderService.self) private var recorder
+    @Environment(UserStore.self) private var user
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     /// Which items a round plays.
     private enum ListSource: String, CaseIterable, Identifiable {
@@ -273,7 +275,6 @@ struct VocabListenView: View {
                     Text(item.gloss)
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
@@ -352,7 +353,7 @@ struct VocabListenView: View {
             Button(action: down) {
                 Image(systemName: "minus")
                     .font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                     .background(Theme.paper, in: Circle())
                     .contentShape(Rectangle())
             }
@@ -365,7 +366,7 @@ struct VocabListenView: View {
             Button(action: up) {
                 Image(systemName: "plus")
                     .font(.body.weight(.semibold))
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                     .background(Theme.paper, in: Circle())
                     .contentShape(Rectangle())
             }
@@ -441,8 +442,7 @@ struct VocabListenView: View {
             }
             Text(item.text)
                 .font(.system(size: wordSize, weight: .semibold, design: .serif))
-                .minimumScaleFactor(0.5)
-                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             if let pos = item.pos, !pos.isEmpty {
                 Text(pos)
@@ -461,7 +461,7 @@ struct VocabListenView: View {
             glossArea(item, englishOnly: s.listenEnglishOnly)
             if showSentence, let text {
                 Text(markedSentence(text, occurrence: item.firstSource))
-                    .font(Theme.readingFont(1))
+                    .font(Theme.readingFont(size: Theme.readingPointSize(user.settings.fontSize, typeSize: typeSize)))
                     .lineSpacing(6)
                     .textSelection(.enabled)
             }
@@ -639,7 +639,7 @@ struct VocabListenView: View {
                 Image(systemName: on ? "checkmark.square.fill" : "square")
                     .font(.title2)
                     .foregroundStyle(on ? Theme.accent : Color.secondary)
-                    .frame(width: 44, height: 44)
+                    .frame(minWidth: 44, minHeight: 44)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.text)
                         .font(Font.system(.body, design: .serif).weight(.semibold))
@@ -647,7 +647,6 @@ struct VocabListenView: View {
                         Text(item.gloss)
                             .font(.callout)
                             .foregroundStyle(.secondary)
-                            .lineLimit(2)
                     }
                     Text(detail)
                         .font(.caption)

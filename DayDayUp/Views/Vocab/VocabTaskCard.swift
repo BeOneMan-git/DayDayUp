@@ -16,6 +16,7 @@ struct VocabTaskCard: View {
     @Environment(PlaybackEngine.self) private var engine
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     // Time on this card; paused while it is off screen or the app is not active.
     @State private var shownAt = Date()
@@ -92,13 +93,12 @@ struct VocabTaskCard: View {
     private func header(_ item: VocabItem?) -> some View {
         let reason = VocabTaskCard.reasonBadge(liveFSRS, now: Date())
         return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            FlowLayout(spacing: 8, lineSpacing: 6) {
                 Badge(text: card.task.title, color: Theme.accent)
                 if item?.kind == .chunk {
                     Badge(text: "词群", outlined: true)
                 }
                 Badge(text: reason, outlined: true)
-                Spacer()
             }
             Text(card.task.detail)
                 .font(.callout)
@@ -244,7 +244,7 @@ struct VocabTaskCard: View {
         let source = hasSentence
             ? ItemAudio.sentence(occ, packs: packs, preferOriginal: vocab.settings.preferOriginalAudio)
             : wordSource(item)
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        AdaptiveStack(spacing: 10, rowAlignment: .firstTextBaseline) {
             Text(item.text)
                 .font(Font.system(.title2, design: .serif).weight(.semibold))
             Text(glossText(item))
@@ -342,7 +342,7 @@ struct VocabTaskCard: View {
     private func produceView(_ item: VocabItem) -> some View {
         let topic = VocabTaskCard.topic(for: card)
         let locked = wroteDone || revealedEarly
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        AdaptiveStack(spacing: 10, rowAlignment: .firstTextBaseline) {
             Text(item.text)
                 .font(Font.system(.title2, design: .serif).weight(.semibold))
             if let pos = posText(item) {
@@ -528,7 +528,7 @@ struct VocabTaskCard: View {
         if let occ, let text = VocabTaskCard.highlighted(occ) {
             sentenceBox(unmapped: occ.unmapped == true) {
                 Text(text)
-                    .font(Theme.readingFont(user.settings.fontStep))
+                    .font(readingFont)
                     .lineSpacing(5)
                     .textSelection(.enabled)
             }
@@ -538,10 +538,15 @@ struct VocabTaskCard: View {
     private func blankBlock(_ blank: String, unmapped: Bool) -> some View {
         sentenceBox(unmapped: unmapped) {
             Text(blank)
-                .font(Theme.readingFont(user.settings.fontStep))
+                .font(readingFont)
                 .lineSpacing(5)
                 .accessibilityLabel(blank.replacingOccurrences(of: "＿＿＿", with: "（空）"))
         }
+    }
+
+    /// The learner's English reading size (18…34 pt), following Dynamic Type (UI-P01).
+    private var readingFont: Font {
+        Theme.readingFont(size: Theme.readingPointSize(user.settings.fontSize, typeSize: typeSize))
     }
 
     private func sentenceBox<Content: View>(unmapped: Bool, @ViewBuilder content: () -> Content) -> some View {
@@ -576,7 +581,7 @@ struct VocabTaskCard: View {
 
     private func answerField(_ prompt: String, _ item: VocabItem) -> some View {
         let empty = typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return HStack(spacing: 10) {
+        return AdaptiveStack(spacing: 10) {
             TextField(prompt, text: $typed)
                 .font(Font.system(.title3, design: .serif))
                 .textFieldStyle(.plain)
@@ -901,7 +906,7 @@ struct VocabTaskCard: View {
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        AdaptiveStack(spacing: 10, rowAlignment: .firstTextBaseline) {
             Text(label)
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 110, alignment: .leading)

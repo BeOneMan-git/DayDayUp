@@ -93,7 +93,7 @@ struct BaselineView: View {
     private func partCard(_ part: BaselinePart) -> some View {
         let result = part.result(in: study.state.baseline)
         return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            AdaptiveStack(spacing: 10, rowAlignment: .firstTextBaseline) {
                 Label(part.title, systemImage: part.symbol)
                     .font(.headline)
                 Spacer(minLength: 8)

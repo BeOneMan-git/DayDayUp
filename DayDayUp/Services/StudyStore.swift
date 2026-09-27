@@ -279,6 +279,20 @@ final class StudyStore {
 
     func difficulty(_ ref: ArticleRef) -> Int? { state.articleDifficulty[ref.key] }
 
+    /// PAGE-02 收藏.
+    func isFavorite(_ ref: ArticleRef) -> Bool { state.favorites[ref.key] != nil }
+
+    func toggleFavorite(_ ref: ArticleRef) {
+        let key = ref.key
+        update { s in
+            if s.favorites[key] == nil {
+                s.favorites[key] = Date()
+            } else {
+                s.favorites[key] = nil
+            }
+        }
+    }
+
     func setDifficulty(_ ref: ArticleRef, _ value: Int?) {
         update { $0.articleDifficulty[ref.key] = value.map { min(5, max(1, $0)) } }
     }

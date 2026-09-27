@@ -1,13 +1,16 @@
 import SwiftUI
+import UIKit
 
 /// Six learning entries plus 设置. The tab bar turns into a sidebar with one tap
-/// (sidebarAdaptable), as Apple's HIG suggests for iPad.
+/// (sidebarAdaptable), as Apple's HIG suggests for iPad. The reader's 专注模式 hides the tab bar from inside
+/// the reader (ReaderView), so every other page keeps its navigation.
 struct RootView: View {
     @Environment(Router.self) private var router
     @Environment(PackStore.self) private var packs
     @Environment(UserStore.self) private var user
     @Environment(VocabStore.self) private var vocab
     @Environment(ReadingSession.self) private var session
+    @Environment(RecorderService.self) private var recorder
 
     var body: some View {
         TabView(selection: Bindable(router).tab) {
@@ -43,6 +46,10 @@ struct RootView: View {
         .onChange(of: router.tab, initial: true) { _, tab in
             ActivityClock.shared.currentCategory = RootView.category(for: tab)
         }
+        .onChange(of: recorder.isRecording) { _, recording in
+            // PLAT-08: the recording state is perceivable without looking (VoiceOver speaks it).
+            RootView.announce(recording ? "开始录音" : "录音已停止")
+        }
         .task(id: packs.lexiconReady) {
             // V0.2 生词本 → V0.3 vocabulary items, once, after the lexicon is loaded.
             guard packs.lexiconReady else { return }
@@ -60,5 +67,10 @@ struct RootView: View {
         case .ielts: return .output
         case .today, .progress, .settings: return nil
         }
+    }
+
+    /// Spoken by VoiceOver when it is on; nothing happens otherwise.
+    static func announce(_ text: String) {
+        UIAccessibility.post(notification: .announcement, argument: text)
     }
 }

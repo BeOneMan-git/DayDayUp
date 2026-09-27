@@ -231,7 +231,7 @@ enum Metrics {
             let purpose = ["delayed": "隔日回忆", "weekly": "新材料复测", "baseline": "基线", "practice": "练习"][q.purpose] ?? q.purpose
             return "\(i.titles[q.article] ?? q.article)：\(q.correct)/\(q.total)（\(purpose)）"
         }
-        let speaking = i.practice.speaking.filter { daySet.contains(DayKey.of($0.created)) && !$0.silent }
+        let speaking = i.practice.speaking.filter { daySet.contains($0.dayKey) && !$0.silent }
         let writing = i.practice.writing.filter { w in
             w.versions.contains { v in v.finished.map { daySet.contains(DayKey.of($0)) } ?? false }
         }
