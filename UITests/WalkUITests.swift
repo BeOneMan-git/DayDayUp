@@ -486,7 +486,11 @@ final class WalkUITests: XCTestCase {
                 pause(1.0)
                 let title = currentTitle()
                 if title == before { continue }
-                if expectTitle == nil || title.contains(expectTitle) { return true }
+                if let expectTitle {
+                    if title.contains(expectTitle) { return true }
+                } else {
+                    return true
+                }
                 if !goBack() { relaunch() }
                 _ = reveal(text)
             }
