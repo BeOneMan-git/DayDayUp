@@ -55,7 +55,19 @@ Test 里的三项：
 
 ## 这次核对到的结果
 
-这一节只写在 `xcodebuild -showsdks` 和 `xcrun simctl list` 里亲眼看到的内容。第一次 Test 跑完后补上；在那之前不要把某一版 iOS 当成已经装好。
+2026-09-28 的 Test 运行（[36427386930](https://github.com/BeOneMan-git/DayDayUp/actions/runs/36427386930)）里，日志原文是：
+
+- `xcodebuild -version`：Xcode 26.6（17F113）。
+- `xcodebuild -showsdks`：当前这套 Xcode 的模拟器 SDK 是 **Simulator - iOS 26.5**（`iphonesimulator26.5`）。设备 SDK 是 iOS 26.5。这份列表里没有更低的 iOS SDK。
+- `xcrun simctl list runtimes`：已安装 **iOS 26.2**、**iOS 26.4**（版本号 26.4.1）、**iOS 26.5**。没有单独名叫 iPadOS 的运行时，iPad 模拟器用的就是这些 iOS 运行时。没有另外下载运行时。
+
+镜像里预先建好的 iPad（iOS 26.5）是：iPad Pro 13-inch (M5)、iPad Pro 11-inch (M5)、iPad mini (A17 Pro)、iPad Air 13-inch (M4)、iPad Air 11-inch (M4)、iPad (A16)。里面没有 12.9 英寸第三代。
+
+设备类型里有 **iPad Pro (12.9-inch) (3rd generation)**，iOS 26.5 能用。工作流新建了一台，测试和 App 编译都用它。`xcodebuild` 的目标行是：`OS:26.5, name:iPad Pro (12.9-inch) (3rd generation)`。
+
+所以这次实际用的是：**iPad Pro (12.9-inch) (3rd generation)**，系统 **iOS 26.5**。DayDayUp 按这台模拟器编译通过，部署目标仍是 iPadOS 26.0。38 个逻辑用例，Mac 上和这台模拟器里各一遍，都是 0 失败。模拟器里启动的是测试宿主，不是把 DayDayUp 打开来点界面。
+
+以后 GitHub 换了镜像，以那次运行的 `simctl` 和 `showsdks` 日志为准。规则不变：有 iOS 26 就用其中最新的一套，并尽量用这台第三代。
 
 ## 这不能代替你的 iPad
 
