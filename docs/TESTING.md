@@ -43,6 +43,8 @@ Test 里的三项：
 
 截图和中文报告在同一次运行的产物 **ui-walk** 里。下载后打开 `report.html`，图片在同一个目录。
 
+2026-09-28 的界面走查（[36451724213](https://github.com/BeOneMan-git/DayDayUp/actions/runs/36451724213)）用的仍是 **iPad Pro (12.9-inch) (3rd generation)**、**iOS 26.5**（Xcode 26.6 / 17F113，模拟器 SDK `iphonesimulator26.5`）。截图是竖屏 2048×2732。这一轮在设置后半段到了当时的 45 分钟上限，任务被停掉，已经截到的图仍在产物 **ui-walk** 里。仓库里没有内容包，听读正文和中文翻译没有打开。
+
 ## 怎么开一次
 
 1. 打开 GitHub 仓库的 Actions。

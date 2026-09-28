@@ -152,7 +152,7 @@ jobs:
 
   ui-walk:
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@v4
 
