@@ -443,10 +443,29 @@ final class WalkUITests: XCTestCase {
 
     // MARK: Taps
 
+    /// Detail titles, longest first. Tab names stay last so a pushed page wins over the sidebar.
+    private static let screenTitles = [
+        "学习计划与提醒", "无准备录音", "独立短文", "词汇自测", "建立基线",
+        "口语完整模拟", "口语 Part 2", "基础口语", "基础写作", "写作 Task 1", "写作 Task 2",
+        "词汇设置", "阅读字号与标注", "声音与速度", "资源清单", "能力清单", "完整备份",
+        "从备份恢复", "录音占用与清理", "使用说明", "选一篇文章", "隐私", "听读",
+        "今日", "书架", "跟读", "雅思", "词汇", "进度", "设置",
+    ]
+
     private func currentTitle() -> String {
-        guard let nav = app.navigationBars.allElementsBoundByIndex.first else { return "" }
-        let title = nav.identifier.isEmpty ? nav.label : nav.identifier
-        return title
+        let tabs: Set<String> = ["今日", "书架", "跟读", "雅思", "词汇", "进度", "设置"]
+        var found: [String] = []
+        for bar in app.navigationBars.allElementsBoundByIndex {
+            if let name = Self.screenTitles.first(where: { bar.staticTexts[$0].exists }) {
+                found.append(name)
+                continue
+            }
+            let title = bar.identifier.isEmpty ? bar.label : bar.identifier
+            if !title.isEmpty { found.append(title) }
+        }
+        if let detail = found.last(where: { !tabs.contains($0) }) { return detail }
+        if let any = found.last { return any }
+        return Self.screenTitles.first { app.staticTexts[$0].exists && !tabs.contains($0) } ?? ""
     }
 
     private func relaunch() {
@@ -726,18 +745,20 @@ final class WalkUITests: XCTestCase {
 
     private func visibleText() -> String {
         var parts: [String] = []
-        if let nav = app.navigationBars.allElementsBoundByIndex.first {
-            let title = nav.identifier.isEmpty ? nav.label : nav.identifier
-            if !title.isEmpty { parts.append("导航标题：" + title) }
-        }
-        var count = 0
-        for el in app.staticTexts.allElementsBoundByIndex {
-            if count >= 16 { break }
-            let label = el.label.trimmingCharacters(in: .whitespacesAndNewlines)
-            if label.isEmpty || label.count > 90 { continue }
-            if parts.contains(where: { $0.contains(label) }) { continue }
-            parts.append(label)
-            count += 1
+        let title = currentTitle()
+        if !title.isEmpty { parts.append("导航标题：" + title) }
+        let probes = [
+            "还没有文章", "还没有内容包", "建立基线", "短听读", "需要新版内容包",
+            "先跳过这一项", "看题并开始", "开始写", "词库里还没有可用的词",
+            "还没有词条", "听词列表是空的", "还没有词群", "今日暂无到期",
+            "有效练习时间", "最近 30 天", "最近 7 天", "学习计划与提醒",
+            "还没有导入内容包", "从未备份", "每个题目几分钟就能看完",
+            "基础口语：准备", "考试题型", "导入内容包",
+        ]
+        for probe in probes where app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", probe)).firstMatch.exists {
+            if !parts.contains(where: { $0.contains(probe) }) {
+                parts.append(probe)
+            }
         }
         return parts.joined(separator: "｜")
     }
