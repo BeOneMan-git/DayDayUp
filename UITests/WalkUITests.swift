@@ -32,33 +32,39 @@ final class WalkUITests: XCTestCase {
         shot("01-today", area: "今日", title: "今日",
              did: "启动 DayDayUp（不是逻辑测试宿主），停在默认的“今日”。",
              issue: issueIfMissing(["今日", "还没有文章", "建立基线"]))
-        if tapText("计划设置") {
-            shot("02-today-plan-settings", area: "今日", title: "计划设置",
-                 did: "在今日点了“计划设置”。",
-                 issue: "")
-            goBack()
-        } else {
-            shot("02-today-plan-settings", area: "今日", title: "计划设置没有打开",
-                 did: "在今日找“计划设置”，没有点到。",
-                 issue: "按钮不在当前屏幕上，或点了没有进入新页面。")
-        }
 
-        if tapButton("开始", nearest: "建立基线") {
+        if tapButton("开始", nearest: "建立基线"), currentTitle() == "建立基线" {
             shot("03-baseline", area: "基线", title: "建立基线",
                  did: "在今日计划里点了“建立基线”那一项的“开始”。",
                  issue: "")
+            walkBaselineParts()
         } else {
             shot("03-baseline", area: "基线", title: "建立基线没有打开",
-                 did: "在今日找“建立基线”旁边的“开始”，没有点到。",
-                 issue: "没有进入基线页。")
-            return
+                 did: "在今日找“建立基线”旁边的“开始”，没有进入标题为“建立基线”的页面。",
+                 issue: "没有进入基线页。当时停在：\(currentTitle())。")
         }
 
+        if currentTitle() != "今日" {
+            if !goBack() { relaunch() }
+        }
+        if currentTitle() != "今日" { relaunch(); _ = openTab("今日") }
+        if tapText("计划设置") && currentTitle() == "学习计划与提醒" {
+            shot("02-today-plan-settings", area: "今日", title: "计划设置",
+                 did: "回到今日后点了“计划设置”。",
+                 issue: "")
+        } else {
+            shot("02-today-plan-settings", area: "今日", title: "计划设置没有打开",
+                 did: "在今日找“计划设置”，没有进入“学习计划与提醒”。",
+                 issue: "当时停在：\(currentTitle())。")
+        }
+    }
+
+    private func walkBaselineParts() {
         _ = reveal("短听读")
         shot("04-baseline-listening", area: "基线", title: "短听读（缺内容包）",
              did: "滚到“短听读”。没有点“先跳过这一项”。",
              issue: issueIfMissing(["理解题", "先跳过", "内容包"]))
-        if tapButton("开始", nearest: "无准备录音") {
+        if tapButton("开始", nearest: "无准备录音"), currentTitle() == "无准备录音" {
             shot("05-baseline-speaking", area: "基线", title: "无准备录音",
                  did: "点了“无准备录音”的“开始”。没有点“看题并开始”，所以没有倒数，也没有录音。",
                  issue: "")
@@ -69,7 +75,7 @@ final class WalkUITests: XCTestCase {
                  issue: "准备页没有出现。")
         }
 
-        if tapButton("开始", nearest: "独立短文") {
+        if tapButton("开始", nearest: "独立短文"), currentTitle() == "独立短文" {
             shot("06-baseline-writing-ready", area: "基线", title: "独立短文（还没开始写）",
                  did: "点了“独立短文”的“开始”。",
                  issue: "")
@@ -92,7 +98,7 @@ final class WalkUITests: XCTestCase {
                  issue: "准备页没有出现。")
         }
 
-        if tapButton("开始", nearest: "词汇自测") {
+        if tapButton("开始", nearest: "词汇自测"), currentTitle() == "词汇自测" {
             shot("08-baseline-vocab", area: "基线", title: "词汇自测",
                  did: "点了“词汇自测”的“开始”。没有点“先跳过这一项”。",
                  issue: issueIfMissing(["词库", "内容包", "先跳过"]))
@@ -162,12 +168,12 @@ final class WalkUITests: XCTestCase {
         shot("13-ielts-speaking-basic", area: "雅思", title: "雅思 · 口语 · 基础训练",
              did: "打开“雅思”。默认应是口语、基础训练。",
              issue: "")
-        if tapFirstCell(skipping: ["类型", "训练", "口语", "写作", "基础训练", "考试题型"],
-                        skipContaining: ["类型", "基础口语：", "基础训练："]) {
+        if openRow("How often do you use your phone", expectTitle: "基础口语")
+            || openRow("你一天用多", expectTitle: "基础口语") {
             shot("14-ielts-speaking-session", area: "雅思", title: "基础口语",
                  did: "点开第一道基础口语。没有点“开始准备”或“直接开始说”。",
                  issue: "")
-            goBack()
+            if !goBack() { relaunch(); _ = openTab("雅思") }
         } else {
             shot("14-ielts-speaking-session", area: "雅思", title: "基础口语没有打开",
                  did: "口语基础列表里没有点到题目。",
@@ -179,21 +185,23 @@ final class WalkUITests: XCTestCase {
         shot("15-ielts-speaking-exam", area: "雅思", title: "雅思 · 口语 · 考试题型",
              did: "点了“考试题型”。",
              issue: "")
-        if tapCell(containing: "口语完整模拟") {
+        if openRow("口语完整模拟", expectTitle: "口语完整模拟") {
             shot("16-ielts-mock", area: "雅思", title: "口语完整模拟",
                  did: "点开“口语完整模拟”。没有点“开始模拟”。",
                  issue: "")
-            goBack()
+            if !goBack() { relaunch(); _ = openTab("雅思"); _ = tapButtonExact("考试题型") }
         } else {
             shot("16-ielts-mock", area: "雅思", title: "口语完整模拟没有打开",
                  did: "没有点到“口语完整模拟”。",
                  issue: "模拟首页没有出现。")
         }
-        if tapFirstCell(containingAny: ["准备 1 分钟", "Part 2", "You should say"]) {
+        if openRow("Describe a practical skill", expectTitle: "口语 Part 2")
+            || openRow("You should say", expectTitle: "口语 Part 2")
+            || openRow("准备 1 分钟", expectTitle: "口语 Part 2") {
             shot("17-ielts-part2", area: "雅思", title: "口语 Part 2",
                  did: "点开一张 Part 2 题卡。没有点“开始准备”。",
                  issue: "")
-            goBack()
+            if !goBack() { relaunch(); _ = openTab("雅思") }
         } else {
             shot("17-ielts-part2", area: "雅思", title: "口语 Part 2 没有打开",
                  did: "考试题型列表里没有点到 Part 2 题卡。",
@@ -206,12 +214,12 @@ final class WalkUITests: XCTestCase {
         shot("18-ielts-writing-basic", area: "雅思", title: "雅思 · 写作 · 基础训练",
              did: "切到写作、基础训练。",
              issue: "")
-        if tapFirstCell(skipping: ["类型", "训练", "口语", "写作", "基础训练", "考试题型"],
-                        skipContaining: ["类型", "基础写作：", "基础训练："]) {
+        if openRow("smartphones make us less social", expectTitle: "基础写作")
+            || openRow("有人说智能手机", expectTitle: "基础写作") {
             shot("19-ielts-writing-session", area: "雅思", title: "基础写作",
                  did: "点开第一道基础写作。没有点“开始写”，避免计时。",
                  issue: "")
-            goBack()
+            if !goBack() { relaunch(); _ = openTab("雅思"); _ = tapButtonExact("写作"); _ = tapButtonExact("基础训练") }
         } else {
             shot("19-ielts-writing-session", area: "雅思", title: "基础写作没有打开",
                  did: "写作基础列表里没有点到题目。",
@@ -223,22 +231,23 @@ final class WalkUITests: XCTestCase {
         shot("20-ielts-writing-exam", area: "雅思", title: "雅思 · 写作 · 考试题型",
              did: "切到写作的考试题型。",
              issue: "")
-        if tapFirstCell(containingAny: ["150", "Task 1", "线图", "柱状图", "饼图", "表格", "流程图"]) {
+        if openRow("Average daily", expectTitle: "Task 1")
+            || openRow("150", expectTitle: "Task 1") {
             shot("21-ielts-task1", area: "雅思", title: "写作 Task 1",
                  did: "点开第一道 Task 1。没有点“开始写”。",
                  issue: "")
-            goBack()
+            if !goBack() { relaunch(); _ = openTab("雅思"); _ = tapButtonExact("写作"); _ = tapButtonExact("考试题型") }
         } else {
             shot("21-ielts-task1", area: "雅思", title: "写作 Task 1 没有打开",
                  did: "没有点到 Task 1。",
                  issue: "题目页没有出现。")
         }
         _ = reveal("Task 2")
-        if tapFirstCell(containingAny: ["250", "Task 2"]) {
+        if openRow("250", expectTitle: "Task 2") {
             shot("22-ielts-task2", area: "雅思", title: "写作 Task 2",
                  did: "点开第一道 Task 2。没有点“开始写”。",
                  issue: "")
-            goBack()
+            _ = goBack()
         } else {
             shot("22-ielts-task2", area: "雅思", title: "写作 Task 2 没有打开",
                  did: "没有点到 Task 2。",
@@ -336,8 +345,8 @@ final class WalkUITests: XCTestCase {
             return
         }
         openSettings("资源清单", id: "36-settings-resources", title: "资源清单")
-        openSettings("能力清单：断网能做什么", id: "37-settings-capability", title: "能力清单：断网能做什么")
-        openSettings("导出的文件里有什么", id: "38-settings-privacy", title: "导出的文件里有什么")
+        openSettings("能力清单：断网能做什么", id: "37-settings-capability", title: "能力清单", expect: "能力清单")
+        openSettings("导出的文件里有什么", id: "38-settings-privacy", title: "隐私", expect: "隐私")
 
         if tapText("立即完整备份") {
             pause(0.8)
@@ -434,23 +443,70 @@ final class WalkUITests: XCTestCase {
 
     // MARK: Taps
 
+    private func currentTitle() -> String {
+        guard let nav = app.navigationBars.allElementsBoundByIndex.first else { return "" }
+        let title = nav.identifier.isEmpty ? nav.label : nav.identifier
+        return title
+    }
+
+    private func relaunch() {
+        app.terminate()
+        launchApp()
+    }
+
+    /// Taps a row. Returns true when the navigation title changes to something containing `expectTitle`,
+    /// or when `expectTitle` is nil and the title changes at all.
+    @discardableResult
+    private func openRow(_ text: String, expectTitle: String? = nil) -> Bool {
+        guard reveal(text) else { return false }
+        let before = currentTitle()
+        let pred = NSPredicate(format: "label CONTAINS %@", text)
+        var pool: [XCUIElement] = []
+        for query in [app.cells, app.buttons, app.links, app.staticTexts] {
+            pool.append(contentsOf: query.matching(pred).allElementsBoundByIndex)
+        }
+        let usable = pool.filter { el in
+            let frame = el.frame
+            return frame.width > 80 && frame.height > 18 && frame.minY > 20
+        }
+        let ordered = usable.sorted { lhs, rhs in
+            let rank: (XCUIElement) -> Int = { el in
+                switch el.elementType {
+                case .cell: return 0
+                case .button, .link: return 1
+                default: return 2
+                }
+            }
+            if rank(lhs) != rank(rhs) { return rank(lhs) < rank(rhs) }
+            return lhs.frame.width > rhs.frame.width
+        }
+        for target in ordered.prefix(4) {
+            for x in [0.5, 0.25, 0.75] as [CGFloat] {
+                target.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.5)).tap()
+                pause(1.0)
+                let title = currentTitle()
+                if title == before { continue }
+                if expectTitle == nil || title.contains(expectTitle) { return true }
+                if !goBack() { relaunch() }
+                _ = reveal(text)
+            }
+        }
+        print("DDU_HIER row \(text) title=\(currentTitle()) cells=\(app.cells.count)")
+        return false
+    }
+
     @discardableResult
     private func tapText(_ text: String) -> Bool {
+        if openRow(text) { return true }
         if !reveal(text) { return false }
         let pred = NSPredicate(format: "label == %@ OR label BEGINSWITH %@", text, text)
-        for query in [app.buttons, app.cells, app.staticTexts, app.links] {
+        for query in [app.buttons, app.cells, app.staticTexts] {
             let el = query.matching(pred).firstMatch
-            if el.exists, el.isHittable {
-                el.tap()
+            if el.exists {
+                el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
                 pause(0.8)
                 return true
             }
-        }
-        let fallback = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", text)).firstMatch
-        if fallback.exists {
-            fallback.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            pause(0.8)
-            return true
         }
         return false
     }
@@ -549,13 +605,14 @@ final class WalkUITests: XCTestCase {
         return false
     }
 
-    private func openSettings(_ label: String, id: String, title: String) {
-        if tapText(label) {
+    private func openSettings(_ label: String, id: String, title: String, expect: String? = nil) {
+        let wanted = expect ?? title
+        if openRow(label, expectTitle: wanted) || (tapText(label) && currentTitle().contains(wanted)) {
             shot(id, area: "设置", title: title, did: "在设置里点了“\(label)”。", issue: "")
-            goBack()
+            if !goBack() { relaunch(); _ = openTab("设置") }
         } else {
             shot(id, area: "设置", title: "\(title)没有打开",
-                 did: "在设置里找“\(label)”，没有点到。",
+                 did: "在设置里找“\(label)”，点了以后标题仍是“\(currentTitle())”。",
                  issue: "这一页没有出现。上面这张图是当时停住的界面。")
         }
     }
@@ -581,20 +638,29 @@ final class WalkUITests: XCTestCase {
             || app.cells.matching(pred).firstMatch.exists
     }
 
-    private func goBack() {
-        for label in ["返回", "Back"] {
-            let button = app.navigationBars.buttons[label]
-            if button.exists, button.isHittable {
-                button.tap()
-                pause(0.6)
-                return
+    @discardableResult
+    private func goBack() -> Bool {
+        let before = currentTitle()
+        let nav = app.navigationBars.firstMatch
+        let labels = ["返回", "Back", "今日", "书架", "跟读", "雅思", "词汇", "进度", "设置", "使用说明", "词汇复习"]
+        if nav.exists {
+            let buttons = nav.buttons.allElementsBoundByIndex.sorted { $0.frame.minX < $1.frame.minX }
+            for button in buttons where labels.contains(button.label) || button.label.hasPrefix("返回") {
+                button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                pause(0.8)
+                if currentTitle() != before { return true }
+            }
+            if let left = buttons.first {
+                left.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                pause(0.8)
+                if currentTitle() != before { return true }
             }
         }
-        let buttons = app.navigationBars.buttons.allElementsBoundByIndex.filter(\.isHittable)
-        if let left = buttons.first {
-            left.tap()
-            pause(0.6)
-        }
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.45))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.45))
+        start.press(forDuration: 0.08, thenDragTo: end)
+        pause(0.8)
+        return currentTitle() != before
     }
 
     private func dismissPickerThenEnsure(tab: String) {
