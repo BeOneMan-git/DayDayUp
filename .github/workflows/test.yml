@@ -1,5 +1,6 @@
-# Logic tests and an iPad Simulator build. Separate from Build IPA so a red test
-# does not block the unsigned DayDayUp.ipa published from main.
+# Logic tests, an iPad Simulator build, and a UI walk of the DayDayUp app.
+# Separate from Build IPA so a red test does not block the unsigned DayDayUp.ipa
+# published from main. The UI walk uses scheme UIWalk and does not change that IPA.
 name: Test
 
 on:
@@ -148,3 +149,106 @@ jobs:
             simulator-tests.log
             app-simulator-build.log
             build/LogicTests.xcresult
+
+  ui-walk:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain and simulators
+        run: |
+          set -o pipefail
+          {
+            echo "===== xcodebuild -version ====="
+            xcodebuild -version
+            echo "===== xcodebuild -showsdks ====="
+            xcodebuild -showsdks
+            echo "===== xcrun simctl list runtimes ====="
+            xcrun simctl list runtimes
+            echo "===== xcrun simctl list devices available ====="
+            xcrun simctl list devices available
+            echo "===== xcrun simctl list devicetypes ====="
+            xcrun simctl list devicetypes
+          } | tee runner-simulators.txt
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Choose iPad simulator
+        id: select
+        run: python3 .github/scripts/select-ipad-simulator.py
+
+      - name: Record whether DayDayUp can use that simulator
+        id: dest
+        run: |
+          set -o pipefail
+          xcodebuild -project DayDayUp.xcodeproj -scheme UIWalk -showdestinations > destinations-ui.txt 2>&1
+          echo "===== UIWalk destinations =====" | tee -a runner-simulators.txt
+          cat destinations-ui.txt | tee -a runner-simulators.txt
+          if ! grep -F "$SIM_UDID" destinations-ui.txt | grep -v "error:" | grep -q .; then
+            echo "UIWalk 不能用选中的模拟器 $SIM_NAME ($SIM_UDID)" | tee -a simulator-choice.txt
+            exit 1
+          fi
+
+      - name: Walk DayDayUp on the iPad simulator
+        id: walk
+        if: steps.select.outcome == 'success' && steps.dest.outcome == 'success'
+        run: |
+          set +e
+          set -o pipefail
+          rm -rf /tmp/ddu-ui-shots build/UIWalk.xcresult
+          mkdir -p /tmp/ddu-ui-shots
+          export TEST_RUNNER_SIM_SHOT_DIR=/tmp/ddu-ui-shots
+          export TEST_RUNNER_SIM_NAME="$SIM_NAME"
+          export TEST_RUNNER_SIM_OS="$SIM_OS"
+          export TEST_RUNNER_SIM_RUNTIME_NAME="$SIM_RUNTIME_NAME"
+          echo "UI destination: $SIM_DESTINATION ($SIM_NAME, $SIM_RUNTIME_NAME)"
+          xcodebuild test \
+            -project DayDayUp.xcodeproj \
+            -scheme UIWalk \
+            -configuration Debug \
+            -destination "$SIM_DESTINATION" \
+            -derivedDataPath build/DerivedDataUI \
+            -resultBundlePath build/UIWalk.xcresult \
+            -only-testing:DayDayUpUITests/WalkUITests \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee ui-walk.log | grep -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|DDU_SHOT|DDU_HIER|Executed|failed"
+          status=${PIPESTATUS[0]}
+          exit "$status"
+
+      - name: Collect screenshots and report
+        if: always()
+        run: |
+          set +e
+          OUT="$GITHUB_WORKSPACE/ui-walk-out"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          if [ -d /tmp/ddu-ui-shots ]; then
+            cp -R /tmp/ddu-ui-shots/. "$OUT/" || true
+          fi
+          if [ -d build/UIWalk.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/UIWalk.xcresult --output-path "$OUT/xcattachments" || true
+            if [ -d "$OUT/xcattachments" ]; then
+              find "$OUT/xcattachments" -name '*.png' -exec cp {} "$OUT/" \;
+            fi
+          fi
+          cp simulator-choice.txt runner-simulators.txt destinations-ui.txt ui-walk.log "$OUT/" 2>/dev/null || true
+          python3 .github/scripts/ui-walk-report.py --out "$OUT" --choice simulator-choice.txt --log ui-walk.log
+          echo "===== ui-walk-out ====="
+          find "$OUT" -maxdepth 2 -type f | sort
+          ls -lh "$OUT"/*.png 2>/dev/null | head -80 || true
+
+      - name: Upload UI walk
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-walk
+          if-no-files-found: ignore
+          path: ui-walk-out

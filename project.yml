@@ -125,6 +125,22 @@ targets:
         BUNDLE_LOADER: "$(TEST_HOST)"
         TEST_TARGET_NAME: LogicTestHost
         TARGETED_DEVICE_FAMILY: "2"
+  # UI walk of the real DayDayUp app. Not part of the DayDayUp scheme, so the
+  # unsigned IPA build does not compile or embed it.
+  DayDayUpUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.0"
+    sources:
+      - path: UITests
+    dependencies:
+      - target: DayDayUp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daydayup.ui-tests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_TARGET_NAME: DayDayUp
+        TARGETED_DEVICE_FAMILY: "2"
 schemes:
   DayDayUp:
     build:
@@ -143,5 +159,20 @@ schemes:
       config: Debug
       targets:
         - DDULogicTests
+    management:
+      shared: true
+  UIWalk:
+    build:
+      targets:
+        DayDayUp: [test]
+        DayDayUpUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - DayDayUpUITests
+      environmentVariables:
+        - variable: SIM_SHOT_DIR
+          value: /tmp/ddu-ui-shots
+          isEnabled: true
     management:
       shared: true
