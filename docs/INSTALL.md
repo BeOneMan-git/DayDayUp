@@ -131,6 +131,7 @@ V1.0 改了学习记录和内容包的格式。升级本身不删数据，但先
 - `DayDayUp/`：App 源代码（SwiftUI，iPadOS 26 起）。
 - `project.yml`：XcodeGen 配置。GitHub 的 macOS 机器用它生成 Xcode 工程，所以不需要自己的 Mac。
 - `.github/workflows/build.yml`：推送到 dev 分支只编译和跑逻辑测试；推送到 main 分支才产出未签名的 DayDayUp.ipa，发布到 Releases。安装时用你的 Apple ID 签名。
+- `.github/workflows/test.yml`：在同一类 macOS 机器上，用 iPad 模拟器再跑一遍逻辑测试，并为模拟器编译 App。不产出 ipa，失败也不会挡住上面的安装包。怎么开、能测什么，见 [TESTING.md](TESTING.md)。
 - `LogicTests/`：纯逻辑的测试（FSRS 排期、队列、计划、统计、答案核对、内容包比对等），在 CI 里运行。
 - `docs/GUIDE.md`：使用说明。
 - 仓库里没有任何杂志内容。内容包只放在你的电脑和 iPad 上，只供个人学习。雅思题目和参考答案是原创的。

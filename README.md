@@ -12,6 +12,6 @@
 - 进度与周报：投入和证据分开；样本少时明说；周报导出 JSON / CSV / PDF。
 - 数据：学习记录和录音只存在本机，App 没有联网代码；完整备份含录音和作品；恢复先在临时库演练，可撤销；录音清理先预览。
 
-安装与升级见 [docs/INSTALL.md](docs/INSTALL.md)，使用说明见 [docs/GUIDE.md](docs/GUIDE.md)。
+安装与升级见 [docs/INSTALL.md](docs/INSTALL.md)，测试见 [docs/TESTING.md](docs/TESTING.md)，使用说明见 [docs/GUIDE.md](docs/GUIDE.md)。
 
 本仓库只有代码和原创题目，不含任何杂志内容。

@@ -79,6 +79,52 @@ targets:
             UTTypeTagSpecification:
               public.filename-extension:
                 - ddubackup
+  # iPad Simulator host for LogicTests. Not part of the DayDayUp scheme, so the
+  # unsigned IPA build does not compile or embed it. Deployment is below iPadOS 26
+  # so the tests can still launch if the runner has no iOS 26 simulator runtime.
+  LogicTestHost:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: LogicTests/Host
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daydayup.logictest.host
+        PRODUCT_NAME: LogicTestHost
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_CFBundleDisplayName: LogicTestHost
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_LSRequiresIPhoneOS: "YES"
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTS_MACCATALYST: "NO"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        ENABLE_PREVIEWS: "NO"
+  # Same XCTest sources as LogicTests/Package.swift. Logic sources are compiled
+  # into this bundle (they are not a separate module), hosted by LogicTestHost.
+  DDULogicTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: DayDayUp/Logic
+      - path: DayDayUp/Models/PackModels.swift
+      - path: DayDayUp/Models/PracticeModels.swift
+      - path: LogicTests/Tests/DDULogicTests
+    dependencies:
+      - target: LogicTestHost
+        link: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.daydayup.logic-tests
+        IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/LogicTestHost.app/LogicTestHost"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_TARGET_NAME: LogicTestHost
+        TARGETED_DEVICE_FAMILY: "2"
 schemes:
   DayDayUp:
     build:
@@ -88,3 +134,14 @@ schemes:
       config: Debug
     archive:
       config: Release
+  LogicTests:
+    build:
+      targets:
+        LogicTestHost: [test]
+        DDULogicTests: [test]
+    test:
+      config: Debug
+      targets:
+        - DDULogicTests
+    management:
+      shared: true

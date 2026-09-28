@@ -1,5 +1,7 @@
 import XCTest
+#if SWIFT_PACKAGE
 @testable import DDULogic
+#endif
 
 final class PlanEngineTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_790_500_000)   // 2026-09-27
