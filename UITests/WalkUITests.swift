@@ -103,21 +103,19 @@ final class WalkUITests: XCTestCase {
     /// The banner is a list row. A coordinate tap on its label does not open the sheet; try the cell,
     /// then the button, then the trailing “查看并导入”.
     private func openImportSheet() -> Bool {
+        let pred = NSPredicate(format: "label CONTAINS %@", "查看并导入")
+        let exact = NSPredicate(format: "label == %@", "查看并导入")
         for _ in 0..<3 {
             if importSheetVisible() { return true }
-            let pred = NSPredicate(format: "label CONTAINS %@", "查看并导入")
-            let cell = app.cells.matching(pred).firstMatch
-            if cell.exists { press(cell) }
-            if importSheetVisible() { return true }
-            let button = app.buttons.matching(pred).firstMatch
-            if button.exists {
-                press(button)
-                if !importSheetVisible() {
-                    button.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.5)).tap()
-                }
+            for query in [app.buttons.matching(exact), app.staticTexts.matching(exact), app.cells.matching(pred), app.buttons.matching(pred)] {
+                let el = query.firstMatch
+                guard el.exists, onScreen(el) else { continue }
+                el.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+                pause(0.8)
+                if importSheetVisible() { return true }
+                if el.isHittable { el.tap(); pause(0.8) }
+                if importSheetVisible() { return true }
             }
-            if importSheetVisible() { return true }
-            pause(0.4)
         }
         return importSheetVisible()
     }
@@ -126,13 +124,15 @@ final class WalkUITests: XCTestCase {
         sees("导入内容包") || sees("正在检查") || sees("导入所选") || sees("可用空间")
     }
 
+    /// Wide rows only navigate when the click lands on the trailing chevron, not the title text.
     private func press(_ element: XCUIElement) {
-        if element.isHittable {
+        let wide = element.frame.width > 220
+        let x: CGFloat = wide ? 0.93 : 0.5
+        if element.isHittable && !wide {
             element.tap()
-        } else {
-            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
-        pause(0.7)
+        element.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.5)).tap()
+        pause(0.6)
     }
 
     /// Landscape sidebar taps miss. Switch tabs and push rows in portrait, then turn back.
@@ -198,7 +198,7 @@ final class WalkUITests: XCTestCase {
                  issue: sees("先跳过") ? "页面写的是可以先跳过，没有进入理解题。" : "没有点到短听读。")
         }
 
-        if tapButton("开始", nearest: "无准备录音"), waitForTitle("无准备录音", timeout: 6) {
+        if openPart("无准备录音", title: "无准备录音") {
             shot("\(prefix)-baseline-speaking", area: "基线", title: "无准备录音", orientation: orientation,
                  did: "打开“无准备录音”。没有点“看题并开始”，没有录音。", issue: "")
             leaveToTab("今日")
@@ -208,7 +208,7 @@ final class WalkUITests: XCTestCase {
                  did: "没有进入“无准备录音”。", issue: "准备页没有出现。")
         }
 
-        if tapButton("开始", nearest: "独立短文"), waitForTitle("独立短文", timeout: 6) {
+        if openPart("独立短文", title: "独立短文") {
             shot("\(prefix)-baseline-writing", area: "基线", title: "独立短文", orientation: orientation,
                  did: "打开“独立短文”准备页。", issue: "")
             if tapButtonExact("开始写") {
@@ -224,7 +224,7 @@ final class WalkUITests: XCTestCase {
                  did: "没有进入“独立短文”。", issue: "准备页没有出现。")
         }
 
-        if tapButton("开始", nearest: "词汇自测"), waitForTitle("词汇自测", timeout: 6) {
+        if openPart("词汇自测", title: "词汇自测") {
             shot("\(prefix)-baseline-vocab", area: "基线", title: "词汇自测", orientation: orientation,
                  did: "打开“词汇自测”。没有答题。", issue: "")
             leaveToTab("今日")
@@ -232,6 +232,17 @@ final class WalkUITests: XCTestCase {
             shot("\(prefix)-baseline-vocab", area: "基线", title: "词汇自测没有打开", orientation: orientation,
                  did: "没有进入“词汇自测”。", issue: "自测页没有出现。")
         }
+    }
+
+    /// The “开始” pill sits under the card text. A center tap on a wide row misses it.
+    private func openPart(_ anchor: String, title: String) -> Bool {
+        if tapButton("开始", nearest: anchor), waitForTitle(title, timeout: 4) { return true }
+        guard reveal(anchor) else { return false }
+        let text = app.staticTexts.matching(NSPredicate(format: "label == %@", anchor)).firstMatch
+        guard text.exists, onScreen(text) else { return false }
+        let origin = text.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 1))
+        origin.withOffset(CGVector(dx: 24, dy: 130)).tap()
+        return waitForTitle(title, timeout: 4)
     }
 
     @discardableResult
@@ -756,7 +767,7 @@ final class WalkUITests: XCTestCase {
     /// Ignores controls that belong to a tab kept in memory but not shown.
     private func onScreen(_ element: XCUIElement) -> Bool {
         let frame = element.frame
-        return frame.width > 24 && frame.height > 16 && frame.minY > 20 && frame.minY < 1300 && frame.minX > -20 && frame.maxX > 40
+        return frame.width > 24 && frame.height > 16 && frame.minY > 20 && frame.minY < 1500 && frame.minX > -20 && frame.maxX > 40
     }
 
     private func buttonExists(_ name: String) -> Bool {
