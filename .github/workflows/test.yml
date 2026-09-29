@@ -161,7 +161,7 @@ jobs:
 
       - name: Download the content pack for this walk
         env:
-          PACK_GATE_URL: https://psi-east-periods-accent.trycloudflare.com/pack
+          PACK_GATE_URL: https://quantity-english-cleaner-competitors.trycloudflare.com/pack
         run: |
           set -euo pipefail
           mkdir -p /tmp/ddu-pack
