@@ -35,7 +35,7 @@ final class WalkUITests: XCTestCase {
     }
 
     func testPackWalk() {
-        packNote = seedPack()
+        packNote = ""
         launchFresh(.portrait)
         imported = importInbox()
         var info: [String: Any] = [
@@ -61,44 +61,6 @@ final class WalkUITests: XCTestCase {
     }
 
     // MARK: Pack
-
-    /// Copies the pack into the app container. Returns an empty string on success.
-    private func seedPack() -> String {
-        let env = ProcessInfo.processInfo.environment
-        let path = env["PACK_PATH"] ?? env["TEST_RUNNER_PACK_PATH"] ?? ""
-        guard !path.isEmpty else { return "测试进程没有 PACK_PATH。" }
-        guard FileManager.default.fileExists(atPath: path) else { return "内容包不在 \(path)。" }
-        app.launch()
-        _ = app.navigationBars.firstMatch.waitForExistence(timeout: 30)
-        pause(0.6)
-        app.terminate()
-        pause(0.4)
-        let fromEnv = env["SIMULATOR_UDID"] ?? ""
-        let udid = fromEnv.isEmpty ? bootedUDID() : fromEnv
-        guard !udid.isEmpty else { return "找不到已启动的模拟器。" }
-        let dataRoot = run(["xcrun", "simctl", "get_app_container", udid, "com.daydayup.app", "data"])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard dataRoot.hasPrefix("/") else { return "读不到 App 数据目录：\(dataRoot.prefix(180))" }
-        let docs = dataRoot + "/Documents"
-        do {
-            try FileManager.default.createDirectory(atPath: docs, withIntermediateDirectories: true)
-            let dest = docs + "/DayDayUp-2026-09-12-2.ecopack"
-            if FileManager.default.fileExists(atPath: dest) {
-                try FileManager.default.removeItem(atPath: dest)
-            }
-            try FileManager.default.copyItem(atPath: path, toPath: dest)
-        } catch {
-            return "放进文稿文件夹失败：\(error.localizedDescription)"
-        }
-        return ""
-    }
-
-    private func bootedUDID() -> String {
-        let text = run(["xcrun", "simctl", "list", "devices", "booted"])
-        guard let match = text.range(of: #"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"#,
-                                     options: .regularExpression) else { return "" }
-        return String(text[match])
-    }
 
     private func importInbox() -> Bool {
         guard openTab("书架") else {
@@ -912,21 +874,4 @@ final class WalkUITests: XCTestCase {
         return url
     }
 
-    @discardableResult
-    private func run(_ args: [String]) -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = args
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
-        do {
-            try process.run()
-        } catch {
-            return error.localizedDescription
-        }
-        process.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
-    }
 }

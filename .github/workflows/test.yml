@@ -235,18 +235,54 @@ jobs:
           export TEST_RUNNER_SIM_RUNTIME_NAME="$SIM_RUNTIME_NAME"
           export TEST_RUNNER_PACK_PATH=/tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack
           echo "UI destination: $SIM_DESTINATION ($SIM_NAME, $SIM_RUNTIME_NAME)"
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project DayDayUp.xcodeproj \
             -scheme UIWalk \
             -configuration Debug \
             -destination "$SIM_DESTINATION" \
             -derivedDataPath build/DerivedDataUI \
-            -resultBundlePath build/UIWalk.xcresult \
-            -only-testing:DayDayUpUITests/WalkUITests \
-            -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            2>&1 | tee ui-walk-build.log | grep -E "error:|warning:|TEST (SUCCEEDED|FAILED)|BUILD"
+          build_status=${PIPESTATUS[0]}
+          if [ "$build_status" -ne 0 ]; then
+            exit "$build_status"
+          fi
+          APP=$(find build/DerivedDataUI/Build/Products -type d -name 'DayDayUp.app' ! -path '*UITests*' | head -1)
+          echo "APP=$APP"
+          if [ ! -d "$APP" ]; then
+            echo "没有找到 DayDayUp.app"
+            exit 1
+          fi
+          xcrun simctl boot "$SIM_UDID" || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          xcrun simctl install "$SIM_UDID" "$APP"
+          install_status=$?
+          if [ "$install_status" -ne 0 ]; then
+            exit "$install_status"
+          fi
+          xcrun simctl launch "$SIM_UDID" com.daydayup.app || true
+          sleep 2
+          xcrun simctl terminate "$SIM_UDID" com.daydayup.app || true
+          DATA=$(xcrun simctl get_app_container "$SIM_UDID" com.daydayup.app data)
+          mkdir -p "$DATA/Documents"
+          cp /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack "$DATA/Documents/DayDayUp-2026-09-12-2.ecopack"
+          if [ ! -f "$DATA/Documents/DayDayUp-2026-09-12-2.ecopack" ]; then
+            echo "内容包没有放进文稿文件夹"
+            exit 1
+          fi
+          echo "seeded $DATA/Documents"
+          ls -lh "$DATA/Documents"
+          XCT=$(find build/DerivedDataUI -name '*.xctestrun' | head -1)
+          echo "XCT=$XCT"
+          test -f "$XCT"
+          xcodebuild test-without-building \
+            -xctestrun "$XCT" \
+            -destination "$SIM_DESTINATION" \
+            -resultBundlePath build/UIWalk.xcresult \
+            -only-testing:DayDayUpUITests/WalkUITests \
+            -parallel-testing-enabled NO \
             2>&1 | tee ui-walk.log | grep -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|DDU_SHOT|DDU_PACK|DDU_HIER|Executed|failed"
           status=${PIPESTATUS[0]}
           exit "$status"
@@ -267,7 +303,7 @@ jobs:
               find "$OUT/xcattachments" -name '*.png' -exec cp {} "$OUT/" \;
             fi
           fi
-          cp simulator-choice.txt runner-simulators.txt destinations-ui.txt ui-walk.log "$OUT/" 2>/dev/null || true
+          cp simulator-choice.txt runner-simulators.txt destinations-ui.txt ui-walk.log ui-walk-build.log "$OUT/" 2>/dev/null || true
           python3 .github/scripts/ui-walk-report.py --out "$OUT" --choice simulator-choice.txt --log ui-walk.log
           echo "===== ui-walk-out ====="
           find "$OUT" -maxdepth 2 -type f | sort
