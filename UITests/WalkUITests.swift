@@ -7,6 +7,7 @@ final class WalkUITests: XCTestCase {
     private var app = XCUIApplication()
     private var imported = false
     private var packNote = ""
+    private var wantLandscape = false
     private let article = "A new age of the orator"
 
     private let neverTap: Set<String> = [
@@ -76,12 +77,12 @@ final class WalkUITests: XCTestCase {
                 ? "内容包已放进 App 的文稿文件夹。书架顶部出现导入提示。"
                 : "打开书架后等了约 20 秒，没有看到“查看并导入”。",
              issue: banner ? "" : (packNote.isEmpty ? "文稿里的 .ecopack 没有被认成待导入文件。" : packNote))
-        guard banner, tapContaining("查看并导入") else { return false }
+        guard banner, openImportSheet() else { return false }
         let ready = waitToSee("导入所选", timeout: 90)
         shot("port-import-review", area: "导入", title: ready ? "导入预览" : "导入预览没有出来",
              orientation: "竖屏",
              did: "点了“查看并导入”，等文件核对结束。",
-             issue: ready ? "" : "90 秒内没有出现“导入所选”。")
+             issue: ready ? "" : "点了导入提示，但没有进入可以选择“导入所选”的预览。")
         guard ready, waitEnabled("导入所选", timeout: 20), tapContaining("导入所选") else { return false }
         let done = waitToSeeButton("完成", timeout: 120)
         let titles = sees(article) || sees("High and dry")
@@ -99,10 +100,56 @@ final class WalkUITests: XCTestCase {
         return onShelf || titles
     }
 
+    /// The banner is a list row. A coordinate tap on its label does not open the sheet; try the cell,
+    /// then the button, then the trailing “查看并导入”.
+    private func openImportSheet() -> Bool {
+        for _ in 0..<3 {
+            if importSheetVisible() { return true }
+            let pred = NSPredicate(format: "label CONTAINS %@", "查看并导入")
+            let cell = app.cells.matching(pred).firstMatch
+            if cell.exists { press(cell) }
+            if importSheetVisible() { return true }
+            let button = app.buttons.matching(pred).firstMatch
+            if button.exists {
+                press(button)
+                if !importSheetVisible() {
+                    button.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.5)).tap()
+                }
+            }
+            if importSheetVisible() { return true }
+            pause(0.4)
+        }
+        return importSheetVisible()
+    }
+
+    private func importSheetVisible() -> Bool {
+        sees("导入内容包") || sees("正在检查") || sees("导入所选") || sees("可用空间")
+    }
+
+    private func press(_ element: XCUIElement) {
+        if element.isHittable {
+            element.tap()
+        } else {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+        pause(0.7)
+    }
+
+    /// Landscape sidebar taps miss. Switch tabs and push rows in portrait, then turn back.
+    private func withPortraitTaps<T>(_ work: () -> T) -> T {
+        guard wantLandscape else { return work() }
+        setOrientation(.portrait)
+        let value = work()
+        setOrientation(.landscapeLeft)
+        return value
+    }
+
     // MARK: One orientation
 
     private func walk(prefix: String, orientation: String) {
-        if !openTab("今日") { relaunch(prefix == "port" ? .portrait : .landscapeLeft); _ = openTab("今日") }
+        wantLandscape = prefix == "land"
+        setOrientation(wantLandscape ? .landscapeLeft : .portrait)
+        if !openTab("今日") { relaunch(wantLandscape ? .landscapeLeft : .portrait); _ = openTab("今日") }
         shot("\(prefix)-today", area: "今日", title: "今日", orientation: orientation,
              did: "打开“今日”。", issue: "")
 
@@ -482,35 +529,41 @@ final class WalkUITests: XCTestCase {
 
     @discardableResult
     private func openTab(_ name: String) -> Bool {
-        if app.navigationBars[name].exists, currentTitle() == name { return true }
+        if openTabHere(name) { return true }
+        return withPortraitTaps { openTabHere(name) }
+    }
+
+    @discardableResult
+    private func openTabHere(_ name: String) -> Bool {
+        if currentTitle() == name { return true }
         let exact = NSPredicate(format: "label == %@", name)
         let queries = [
             app.tabBars.buttons.matching(exact),
             app.buttons.matching(exact),
             app.collectionViews.buttons.matching(exact),
+            app.staticTexts.matching(exact),
         ]
         for query in queries {
-            let el = query.firstMatch
-            if el.waitForExistence(timeout: 2), el.isHittable {
-                el.tap()
-                pause(0.6)
-                if app.navigationBars[name].waitForExistence(timeout: 4) { return true }
+            let matches = query.matching(exact)
+            if matches.firstMatch.waitForExistence(timeout: 1) == false { continue }
+            let count = min(matches.count, 4)
+            for index in 0..<count {
+                let el = matches.element(boundBy: index)
+                guard el.exists, onScreen(el) else { continue }
+                press(el)
+                if currentTitle() == name { return true }
             }
         }
         for label in ["显示边栏", "Show Sidebar", "侧边栏"] {
             let toggle = app.buttons[label]
-            if toggle.exists, toggle.isHittable {
-                toggle.tap()
-                pause(0.3)
+            if toggle.exists {
+                press(toggle)
                 break
             }
         }
         let again = app.buttons.matching(exact).firstMatch
-        if again.exists, again.isHittable {
-            again.tap()
-            pause(0.6)
-        }
-        return app.navigationBars[name].waitForExistence(timeout: 4)
+        if again.exists { press(again) }
+        return app.navigationBars[name].waitForExistence(timeout: 3) && currentTitle() == name
     }
 
     private func leaveToTab(_ name: String) {
@@ -558,23 +611,30 @@ final class WalkUITests: XCTestCase {
 
     @discardableResult
     private func openRow(_ text: String, expectTitle: String) -> Bool {
+        if openRowHere(text, expectTitle: expectTitle) { return true }
+        return withPortraitTaps { openRowHere(text, expectTitle: expectTitle) }
+    }
+
+    @discardableResult
+    private func openRowHere(_ text: String, expectTitle: String) -> Bool {
         guard reveal(text) else { return false }
         let before = currentTitle()
         let pred = NSPredicate(format: "label CONTAINS %@", text)
-        let queries: [XCUIElementQuery] = [app.buttons, app.cells, app.links, app.staticTexts]
+        let queries: [XCUIElementQuery] = [app.cells, app.buttons, app.links]
         for query in queries {
-            let el = query.matching(pred).firstMatch
-            guard el.exists else { continue }
-            let frame = el.frame
-            guard frame.width > 40, frame.height > 16 else { continue }
-            el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            pause(0.9)
-            if currentTitle() != before, currentTitle() == expectTitle || app.navigationBars[expectTitle].exists {
-                return true
-            }
-            if currentTitle() != before, currentTitle() != expectTitle {
-                _ = goBack()
-                _ = reveal(text)
+            let matches = query.matching(pred)
+            let count = min(matches.count, 4)
+            for index in 0..<count {
+                let el = matches.element(boundBy: index)
+                guard el.exists, onScreen(el) else { continue }
+                press(el)
+                if app.navigationBars[expectTitle].waitForExistence(timeout: 3) || currentTitle() == expectTitle {
+                    return true
+                }
+                if currentTitle() != before, currentTitle() != expectTitle {
+                    _ = goBack()
+                    _ = reveal(text)
+                }
             }
         }
         return app.navigationBars[expectTitle].exists
@@ -670,29 +730,33 @@ final class WalkUITests: XCTestCase {
         guard reveal(anchorText) else { return false }
         let anchor = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", anchorText)).firstMatch
         guard anchor.exists else { return false }
-        let pred = NSPredicate(format: "label == %@", name)
+        let pred = NSPredicate(format: "label == %@ OR label BEGINSWITH %@", name, name)
         var best: XCUIElement?
         var bestDy = CGFloat.greatestFiniteMagnitude
         let y = anchor.frame.midY
-        let matches = app.buttons.matching(pred)
-        let count = min(matches.count, 8)
-        for index in 0..<count {
-            let button = matches.element(boundBy: index)
-            guard button.exists, button.isEnabled else { continue }
-            let dy = abs(button.frame.midY - y)
-            if dy < bestDy {
-                bestDy = dy
-                best = button
+        for query in [app.buttons, app.scrollViews.buttons] {
+            let matches = query.matching(pred)
+            let count = min(matches.count, 8)
+            for index in 0..<count {
+                let button = matches.element(boundBy: index)
+                guard button.exists, button.isEnabled, onScreen(button) else { continue }
+                let dy = button.frame.midY - y
+                guard dy > -20, dy < 420 else { continue }
+                if dy < bestDy {
+                    bestDy = dy
+                    best = button
+                }
             }
         }
         guard let chosen = best else { return false }
-        if chosen.isHittable {
-            chosen.tap()
-        } else {
-            chosen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        }
-        pause(0.7)
+        press(chosen)
         return true
+    }
+
+    /// Ignores controls that belong to a tab kept in memory but not shown.
+    private func onScreen(_ element: XCUIElement) -> Bool {
+        let frame = element.frame
+        return frame.width > 24 && frame.height > 16 && frame.minY > 20 && frame.minY < 1300 && frame.minX > -20 && frame.maxX > 40
     }
 
     private func buttonExists(_ name: String) -> Bool {
