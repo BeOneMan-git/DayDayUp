@@ -152,9 +152,36 @@ jobs:
 
   ui-walk:
     runs-on: macos-26
-    timeout-minutes: 70
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download the content pack for this walk
+        env:
+          PACK_GATE_URL: https://psi-east-periods-accent.trycloudflare.com/pack
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ddu-pack
+          TOKEN=$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=daydayup-pack-import" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          curl -fL --retry 4 --retry-delay 3 \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -o /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack \
+            "$PACK_GATE_URL"
+          python3 - <<'PY'
+          import tarfile
+          path = "/tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack"
+          archive = tarfile.open(path)
+          names = archive.getnames()
+          assert "manifest.json" in names
+          assert any(name.endswith(".m4a") for name in names)
+          print("pack entries", len(names))
+          PY
+          ls -lh /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack
 
       - name: Show toolchain and simulators
         run: |
@@ -206,6 +233,7 @@ jobs:
           export TEST_RUNNER_SIM_NAME="$SIM_NAME"
           export TEST_RUNNER_SIM_OS="$SIM_OS"
           export TEST_RUNNER_SIM_RUNTIME_NAME="$SIM_RUNTIME_NAME"
+          export TEST_RUNNER_PACK_PATH=/tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack
           echo "UI destination: $SIM_DESTINATION ($SIM_NAME, $SIM_RUNTIME_NAME)"
           xcodebuild test \
             -project DayDayUp.xcodeproj \
@@ -219,7 +247,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            2>&1 | tee ui-walk.log | grep -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|DDU_SHOT|DDU_HIER|Executed|failed"
+            2>&1 | tee ui-walk.log | grep -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|DDU_SHOT|DDU_PACK|DDU_HIER|Executed|failed"
           status=${PIPESTATUS[0]}
           exit "$status"
 

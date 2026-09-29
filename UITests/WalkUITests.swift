@@ -1,11 +1,18 @@
 import XCTest
 
-/// Opens the real DayDayUp app on the iPad simulator and walks screens that do not
-/// need a content pack. Screenshots go to SIM_SHOT_DIR (or /tmp/ddu-ui-shots) and
-/// to the xcresult. Lines starting with DDU_SHOT are the Chinese notes for the report.
-/// Microphone recording is never started.
+/// Walks the real DayDayUp app on the iPad simulator after one .ecopack is dropped into Documents.
+/// Portrait first, then landscape. Microphone recording is never started.
+/// Screenshots and one JSON line per screen go to SIM_SHOT_DIR (DDU_SHOT in the log).
 final class WalkUITests: XCTestCase {
     private var app = XCUIApplication()
+    private var imported = false
+    private var packNote = ""
+    private let article = "A new age of the orator"
+
+    private let neverTap: Set<String> = [
+        "录音", "录音跟读", "开始复述", "直接开始说", "看题并开始",
+        "删除", "删除这个内容包", "继续",
+    ]
 
     override func setUpWithError() throws {
         continueAfterFailure = true
@@ -27,386 +34,493 @@ final class WalkUITests: XCTestCase {
         app.terminate()
     }
 
-    func test01TodayAndBaseline() {
-        launchApp()
-        shot("01-today", area: "今日", title: "今日",
-             did: "启动 DayDayUp（不是逻辑测试宿主），停在默认的“今日”。",
-             issue: issueIfMissing(["今日", "还没有文章", "建立基线"]))
-
-        if tapButton("开始", nearest: "建立基线"), currentTitle() == "建立基线" {
-            shot("03-baseline", area: "基线", title: "建立基线",
-                 did: "在今日计划里点了“建立基线”那一项的“开始”。",
-                 issue: "")
-            walkBaselineParts()
-        } else {
-            shot("03-baseline", area: "基线", title: "建立基线没有打开",
-                 did: "在今日找“建立基线”旁边的“开始”，没有进入标题为“建立基线”的页面。",
-                 issue: "没有进入基线页。当时停在：\(currentTitle())。")
-        }
-
-        if currentTitle() != "今日" {
-            if !goBack() { relaunch() }
-        }
-        if currentTitle() != "今日" { relaunch(); _ = openTab("今日") }
-        if tapText("计划设置") && currentTitle() == "学习计划与提醒" {
-            shot("02-today-plan-settings", area: "今日", title: "计划设置",
-                 did: "回到今日后点了“计划设置”。",
-                 issue: "")
-        } else {
-            shot("02-today-plan-settings", area: "今日", title: "计划设置没有打开",
-                 did: "在今日找“计划设置”，没有进入“学习计划与提醒”。",
-                 issue: "当时停在：\(currentTitle())。")
-        }
-    }
-
-    private func walkBaselineParts() {
-        _ = reveal("短听读")
-        shot("04-baseline-listening", area: "基线", title: "短听读（缺内容包）",
-             did: "滚到“短听读”。没有点“先跳过这一项”。",
-             issue: issueIfMissing(["理解题", "先跳过", "内容包"]))
-        if tapButton("开始", nearest: "无准备录音"), currentTitle() == "无准备录音" {
-            shot("05-baseline-speaking", area: "基线", title: "无准备录音",
-                 did: "点了“无准备录音”的“开始”。没有点“看题并开始”，所以没有倒数，也没有录音。",
-                 issue: "")
-            goBack()
-        } else {
-            shot("05-baseline-speaking", area: "基线", title: "无准备录音没有打开",
-                 did: "在基线页找“无准备录音”的“开始”，没有点到。",
-                 issue: "准备页没有出现。")
-        }
-
-        if tapButton("开始", nearest: "独立短文"), currentTitle() == "独立短文" {
-            shot("06-baseline-writing-ready", area: "基线", title: "独立短文（还没开始写）",
-                 did: "点了“独立短文”的“开始”。",
-                 issue: "")
-            if tapButtonExact("开始写") {
-                shot("07-baseline-writing-editor", area: "基线", title: "独立短文编辑",
-                     did: "点了“开始写”，看到计时和输入区。没有输入文字，也没有点“写完了”。",
-                     issue: "")
-                if tapButtonExact("离开") {
-                    _ = tapButtonExact("离开，不保存")
-                }
-            } else {
-                shot("07-baseline-writing-editor", area: "基线", title: "独立短文编辑没有打开",
-                     did: "准备页上没有点到“开始写”。",
-                     issue: "编辑区没有出现。")
-                goBack()
-            }
-        } else {
-            shot("06-baseline-writing-ready", area: "基线", title: "独立短文没有打开",
-                 did: "在基线页找“独立短文”的“开始”，没有点到。",
-                 issue: "准备页没有出现。")
-        }
-
-        if tapButton("开始", nearest: "词汇自测"), currentTitle() == "词汇自测" {
-            shot("08-baseline-vocab", area: "基线", title: "词汇自测",
-                 did: "点了“词汇自测”的“开始”。没有点“先跳过这一项”。",
-                 issue: issueIfMissing(["词库", "内容包", "先跳过"]))
-            goBack()
-        } else {
-            shot("08-baseline-vocab", area: "基线", title: "词汇自测没有打开",
-                 did: "在基线页找“词汇自测”的“开始”，没有点到。",
-                 issue: "自测页没有出现。")
-        }
-    }
-
-    func test02LibraryAndShadow() {
-        launchApp()
-        guard openTab("书架") else {
-            shot("09-library", area: "书架", title: "书架没有打开",
-                 did: "点侧栏或标签“书架”，页面没有切过去。",
-                 issue: "标签点不到。当时的界面见这张图。")
-            return
-        }
-        shot("09-library", area: "书架", title: "书架",
-             did: "打开“书架”。",
-             issue: issueIfMissing(["还没有内容包", "导入内容包"]))
-        if tapButtonExact("导入内容包") {
-            pause(1.2)
-            shot("10-library-import", area: "书架", title: "导入内容包",
-                 did: "点了“导入内容包”，看文件选择器是否出现。没有选择任何文件。",
-                 issue: "")
-            dismissPickerThenEnsure(tab: "书架")
-        } else {
-            shot("10-library-import", area: "书架", title: "导入没有打开",
-                 did: "书架上没有点到“导入内容包”。",
-                 issue: "文件选择器没有出现。")
-        }
-
-        guard openTab("跟读") else {
-            shot("11-shadow", area: "跟读", title: "跟读没有打开",
-                 did: "点“跟读”，页面没有切过去。",
-                 issue: "标签点不到。")
-            return
-        }
-        shot("11-shadow", area: "跟读", title: "跟读",
-             did: "打开“跟读”。仓库里没有内容包，这里应是选文章的空列表。",
-             issue: issueIfMissing(["内容包", "还没有"]))
-        if tapButtonExact("换一篇") {
-            pause(0.8)
-            shot("12-shadow-picker", area: "跟读", title: "选一篇文章",
-                 did: "点了“换一篇”。",
-                 issue: issueIfMissing(["选一篇", "内容包", "取消"]))
-            if !tapButtonExact("取消") {
-                dismissPickerThenEnsure(tab: "跟读")
-            }
-        } else {
-            shot("12-shadow-picker", area: "跟读", title: "选文章没有打开",
-                 did: "没有点到“换一篇”。",
-                 issue: "选文章的页面没有出现。")
-        }
-    }
-
-    func test03IELTS() {
-        launchApp()
-        guard openTab("雅思") else {
-            shot("13-ielts", area: "雅思", title: "雅思没有打开",
-                 did: "点“雅思”，页面没有切过去。",
-                 issue: "标签点不到。")
-            return
-        }
-        shot("13-ielts-speaking-basic", area: "雅思", title: "雅思 · 口语 · 基础训练",
-             did: "打开“雅思”。默认应是口语、基础训练。",
-             issue: "")
-        if openRow("How often do you use your phone", expectTitle: "基础口语")
-            || openRow("你一天用多", expectTitle: "基础口语") {
-            shot("14-ielts-speaking-session", area: "雅思", title: "基础口语",
-                 did: "点开第一道基础口语。没有点“开始准备”或“直接开始说”。",
-                 issue: "")
-            if !goBack() { relaunch(); _ = openTab("雅思") }
-        } else {
-            shot("14-ielts-speaking-session", area: "雅思", title: "基础口语没有打开",
-                 did: "口语基础列表里没有点到题目。",
-                 issue: "题目页没有出现。")
-        }
-
-        _ = tapButtonExact("考试题型")
-        pause(0.6)
-        shot("15-ielts-speaking-exam", area: "雅思", title: "雅思 · 口语 · 考试题型",
-             did: "点了“考试题型”。",
-             issue: "")
-        if openRow("口语完整模拟", expectTitle: "口语完整模拟") {
-            shot("16-ielts-mock", area: "雅思", title: "口语完整模拟",
-                 did: "点开“口语完整模拟”。没有点“开始模拟”。",
-                 issue: "")
-            if !goBack() { relaunch(); _ = openTab("雅思"); _ = tapButtonExact("考试题型") }
-        } else {
-            shot("16-ielts-mock", area: "雅思", title: "口语完整模拟没有打开",
-                 did: "没有点到“口语完整模拟”。",
-                 issue: "模拟首页没有出现。")
-        }
-        if openRow("Describe a practical skill", expectTitle: "口语 Part 2")
-            || openRow("You should say", expectTitle: "口语 Part 2")
-            || openRow("准备 1 分钟", expectTitle: "口语 Part 2") {
-            shot("17-ielts-part2", area: "雅思", title: "口语 Part 2",
-                 did: "点开一张 Part 2 题卡。没有点“开始准备”。",
-                 issue: "")
-            if !goBack() { relaunch(); _ = openTab("雅思") }
-        } else {
-            shot("17-ielts-part2", area: "雅思", title: "口语 Part 2 没有打开",
-                 did: "考试题型列表里没有点到 Part 2 题卡。",
-                 issue: "题卡页没有出现。")
-        }
-
-        _ = tapButtonExact("写作")
-        _ = tapButtonExact("基础训练")
-        pause(0.6)
-        shot("18-ielts-writing-basic", area: "雅思", title: "雅思 · 写作 · 基础训练",
-             did: "切到写作、基础训练。",
-             issue: "")
-        if openRow("smartphones make us less social", expectTitle: "基础写作")
-            || openRow("有人说智能手机", expectTitle: "基础写作") {
-            shot("19-ielts-writing-session", area: "雅思", title: "基础写作",
-                 did: "点开第一道基础写作。没有点“开始写”，避免计时。",
-                 issue: "")
-            if !goBack() { relaunch(); _ = openTab("雅思"); _ = tapButtonExact("写作"); _ = tapButtonExact("基础训练") }
-        } else {
-            shot("19-ielts-writing-session", area: "雅思", title: "基础写作没有打开",
-                 did: "写作基础列表里没有点到题目。",
-                 issue: "题目页没有出现。")
-        }
-
-        _ = tapButtonExact("考试题型")
-        pause(0.6)
-        shot("20-ielts-writing-exam", area: "雅思", title: "雅思 · 写作 · 考试题型",
-             did: "切到写作的考试题型。",
-             issue: "")
-        if openRow("Average daily", expectTitle: "Task 1")
-            || openRow("150", expectTitle: "Task 1") {
-            shot("21-ielts-task1", area: "雅思", title: "写作 Task 1",
-                 did: "点开第一道 Task 1。没有点“开始写”。",
-                 issue: "")
-            if !goBack() { relaunch(); _ = openTab("雅思"); _ = tapButtonExact("写作"); _ = tapButtonExact("考试题型") }
-        } else {
-            shot("21-ielts-task1", area: "雅思", title: "写作 Task 1 没有打开",
-                 did: "没有点到 Task 1。",
-                 issue: "题目页没有出现。")
-        }
-        _ = reveal("Task 2")
-        if openRow("250", expectTitle: "Task 2") {
-            shot("22-ielts-task2", area: "雅思", title: "写作 Task 2",
-                 did: "点开第一道 Task 2。没有点“开始写”。",
-                 issue: "")
-            _ = goBack()
-        } else {
-            shot("22-ielts-task2", area: "雅思", title: "写作 Task 2 没有打开",
-                 did: "没有点到 Task 2。",
-                 issue: "题目页没有出现。")
-        }
-    }
-
-    func test04VocabAndProgress() {
-        launchApp()
-        guard openTab("词汇") else {
-            shot("23-vocab-review", area: "词汇", title: "词汇没有打开",
-                 did: "点“词汇”，页面没有切过去。",
-                 issue: "标签点不到。")
-            return
-        }
-        let pages = [
-            ("23-vocab-review", "复习"),
-            ("24-vocab-browse", "浏览"),
-            ("25-vocab-listen", "听词"),
-            ("26-vocab-spell", "拼写"),
-            ("27-vocab-chunks", "词群"),
+    func testPackWalk() {
+        packNote = seedPack()
+        launchFresh(.portrait)
+        imported = importInbox()
+        var info: [String: Any] = [
+            "packFile": "DayDayUp-2026-09-12-2.ecopack",
+            "imported": imported,
+            "packNote": packNote,
+            "sawOrator": sees(article),
+            "sawWater": sees("High and dry"),
+            "sawInvent": sees("All the things we do not see"),
         ]
-        for (id, name) in pages {
-            if name != "复习" {
-                _ = tapButtonExact(name)
-                pause(0.5)
-            }
-            shot(id, area: "词汇", title: "词汇 · \(name)",
-                 did: "打开词汇的“\(name)”。没有收藏词，也没有导入 CSV。",
-                 issue: "")
+        if let data = try? JSONSerialization.data(withJSONObject: info),
+           let line = String(data: data, encoding: .utf8) {
+            print("DDU_PACK \(line)")
+            try? data.write(to: Self.shotDirectory().appendingPathComponent("pack.json"))
         }
-
-        guard openTab("进度") else {
-            shot("28-progress-7", area: "进度", title: "进度没有打开",
-                 did: "点“进度”，页面没有切过去。",
-                 issue: "标签点不到。")
-            return
-        }
-        shot("28-progress-7", area: "进度", title: "进度 · 最近 7 天",
-             did: "打开“进度”。默认窗口是最近 7 天。",
-             issue: "")
-        if tapButtonExact("最近 30 天") {
-            shot("29-progress-30", area: "进度", title: "进度 · 最近 30 天",
-                 did: "点了“最近 30 天”。",
-                 issue: "")
-        } else {
-            shot("29-progress-30", area: "进度", title: "最近 30 天没有点到",
-                 did: "进度页上没有点到“最近 30 天”。",
-                 issue: "窗口可能仍是 7 天。")
+        walk(prefix: "port", orientation: "竖屏")
+        setOrientation(.landscapeLeft)
+        walk(prefix: "land", orientation: "横屏")
+        info["finished"] = true
+        if let data = try? JSONSerialization.data(withJSONObject: info) {
+            try? data.write(to: Self.shotDirectory().appendingPathComponent("pack.json"))
         }
     }
 
-    func test05SettingsLearning() {
-        launchApp()
-        guard openTab("设置") else {
-            shot("30-settings", area: "设置", title: "设置没有打开",
-                 did: "点“设置”，页面没有切过去。",
-                 issue: "标签点不到。")
+    // MARK: Pack
+
+    /// Copies the pack into the app container. Returns an empty string on success.
+    private func seedPack() -> String {
+        let env = ProcessInfo.processInfo.environment
+        let path = env["PACK_PATH"] ?? env["TEST_RUNNER_PACK_PATH"] ?? ""
+        guard !path.isEmpty else { return "测试进程没有 PACK_PATH。" }
+        guard FileManager.default.fileExists(atPath: path) else { return "内容包不在 \(path)。" }
+        app.launch()
+        _ = app.navigationBars.firstMatch.waitForExistence(timeout: 30)
+        pause(0.6)
+        app.terminate()
+        pause(0.4)
+        let fromEnv = env["SIMULATOR_UDID"] ?? ""
+        let udid = fromEnv.isEmpty ? bootedUDID() : fromEnv
+        guard !udid.isEmpty else { return "找不到已启动的模拟器。" }
+        let dataRoot = run(["xcrun", "simctl", "get_app_container", udid, "com.daydayup.app", "data"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard dataRoot.hasPrefix("/") else { return "读不到 App 数据目录：\(dataRoot.prefix(180))" }
+        let docs = dataRoot + "/Documents"
+        do {
+            try FileManager.default.createDirectory(atPath: docs, withIntermediateDirectories: true)
+            let dest = docs + "/DayDayUp-2026-09-12-2.ecopack"
+            if FileManager.default.fileExists(atPath: dest) {
+                try FileManager.default.removeItem(atPath: dest)
+            }
+            try FileManager.default.copyItem(atPath: path, toPath: dest)
+        } catch {
+            return "放进文稿文件夹失败：\(error.localizedDescription)"
+        }
+        return ""
+    }
+
+    private func bootedUDID() -> String {
+        let text = run(["xcrun", "simctl", "list", "devices", "booted"])
+        guard let match = text.range(of: #"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}"#,
+                                     options: .regularExpression) else { return "" }
+        return String(text[match])
+    }
+
+    private func importInbox() -> Bool {
+        guard openTab("书架") else {
+            shot("port-import-banner", area: "导入", title: "书架没有打开", orientation: "竖屏",
+                 did: "准备导入前点“书架”，页面没有切过去。",
+                 issue: packNote.isEmpty ? "标签点不到。" : packNote)
+            return false
+        }
+        let banner = waitToSee("查看并导入", timeout: 20)
+        shot("port-import-banner", area: "导入", title: banner ? "发现待导入的内容包" : "没有出现导入提示",
+             orientation: "竖屏",
+             did: banner
+                ? "内容包已放进 App 的文稿文件夹。书架顶部出现导入提示。"
+                : "打开书架后等了约 20 秒，没有看到“查看并导入”。",
+             issue: banner ? "" : (packNote.isEmpty ? "文稿里的 .ecopack 没有被认成待导入文件。" : packNote))
+        guard banner, tapContaining("查看并导入") else { return false }
+        let ready = waitToSee("导入所选", timeout: 90)
+        shot("port-import-review", area: "导入", title: ready ? "导入预览" : "导入预览没有出来",
+             orientation: "竖屏",
+             did: "点了“查看并导入”，等文件核对结束。",
+             issue: ready ? "" : "90 秒内没有出现“导入所选”。")
+        guard ready, waitEnabled("导入所选", timeout: 20), tapContaining("导入所选") else { return false }
+        let done = waitToSeeButton("完成", timeout: 120)
+        let titles = sees(article) || sees("High and dry")
+        shot("port-import-done", area: "导入", title: done ? "导入结果" : "导入没有完成",
+             orientation: "竖屏",
+             did: "点了“导入所选”，等待写入书架。",
+             issue: done ? "" : "120 秒内没有出现“完成”。")
+        if done { _ = tapButtonExact("完成", timeout: 5) }
+        pause(1.0)
+        let onShelf = sees(article) || sees("High and dry") || sees("All the things we do not see")
+        shot("port-import-shelf", area: "导入", title: onShelf ? "书架已有文章" : "导入后书架仍是空的",
+             orientation: "竖屏",
+             did: "关掉导入结果后看书架。",
+             issue: onShelf ? "" : "没有看到三篇文章的标题。")
+        return onShelf || titles
+    }
+
+    // MARK: One orientation
+
+    private func walk(prefix: String, orientation: String) {
+        if !openTab("今日") { relaunch(prefix == "port" ? .portrait : .landscapeLeft); _ = openTab("今日") }
+        shot("\(prefix)-today", area: "今日", title: "今日", orientation: orientation,
+             did: "打开“今日”。", issue: "")
+
+        if tapButton("开始", nearest: "建立基线"), waitForTitle("建立基线", timeout: 6) {
+            shot("\(prefix)-baseline", area: "基线", title: "建立基线", orientation: orientation,
+                 did: "点了今日里“建立基线”的“开始”。", issue: "")
+            walkBaseline(prefix: prefix, orientation: orientation)
+            leaveToTab("今日")
+        } else {
+            shot("\(prefix)-baseline", area: "基线", title: "建立基线没有打开", orientation: orientation,
+                 did: "没有进入标题为“建立基线”的页面。当时停在：\(currentTitle())。",
+                 issue: "基线页没有出现。")
+        }
+
+        if tapText("计划设置"), waitForTitle("学习计划与提醒", timeout: 5) {
+            shot("\(prefix)-today-plan", area: "今日", title: "计划设置", orientation: orientation,
+                 did: "在今日点了“计划设置”。", issue: "")
+            leaveToTab("今日")
+        }
+
+        walkLibraryAndReader(prefix: prefix, orientation: orientation)
+        walkShadow(prefix: prefix, orientation: orientation)
+        walkIELTS(prefix: prefix, orientation: orientation)
+        walkVocab(prefix: prefix, orientation: orientation)
+        walkProgress(prefix: prefix, orientation: orientation)
+        walkSettings(prefix: prefix, orientation: orientation)
+    }
+
+    private func walkBaseline(prefix: String, orientation: String) {
+        _ = reveal("短听读")
+        if sees("听一小段") || sees("这次用") || sees("理解题") {
+            shot("\(prefix)-baseline-listening-note", area: "基线", title: "短听读说明", orientation: orientation,
+                 did: "滚到“短听读”，看内容包有没有理解题。", issue: "")
+        }
+        if tapButton("开始", nearest: "短听读") {
+            let opened = waitToSee("基线：短听读", timeout: 8) || waitToSee("听一小段", timeout: 3) || waitToSee("理解题", timeout: 2)
+            shot("\(prefix)-baseline-quiz", area: "基线", title: opened ? "短听读理解题" : "短听读没有打开",
+                 orientation: orientation,
+                 did: "点了“短听读”的“开始”。没有点“播放”，所以没有听完这一段。",
+                 issue: opened ? "" : "理解题页面没有出现。")
+            if opened { _ = tapButtonExact("关闭", timeout: 3) }
+            pause(0.4)
+        } else {
+            shot("\(prefix)-baseline-quiz", area: "基线", title: "短听读不能开始", orientation: orientation,
+                 did: "“短听读”旁边没有可点的“开始”。",
+                 issue: sees("先跳过") ? "页面写的是可以先跳过，没有进入理解题。" : "没有点到短听读。")
+        }
+
+        if tapButton("开始", nearest: "无准备录音"), waitForTitle("无准备录音", timeout: 6) {
+            shot("\(prefix)-baseline-speaking", area: "基线", title: "无准备录音", orientation: orientation,
+                 did: "打开“无准备录音”。没有点“看题并开始”，没有录音。", issue: "")
+            leaveToTab("今日")
+            _ = openBaselineAgain()
+        } else {
+            shot("\(prefix)-baseline-speaking", area: "基线", title: "无准备录音没有打开", orientation: orientation,
+                 did: "没有进入“无准备录音”。", issue: "准备页没有出现。")
+        }
+
+        if tapButton("开始", nearest: "独立短文"), waitForTitle("独立短文", timeout: 6) {
+            shot("\(prefix)-baseline-writing", area: "基线", title: "独立短文", orientation: orientation,
+                 did: "打开“独立短文”准备页。", issue: "")
+            if tapButtonExact("开始写") {
+                pause(0.6)
+                shot("\(prefix)-baseline-writing-editor", area: "基线", title: "独立短文编辑", orientation: orientation,
+                     did: "点了“开始写”。没有输入，也没有点“写完了”。", issue: "")
+                if tapButtonExact("离开", timeout: 2) { _ = tapButtonExact("离开，不保存", timeout: 2) }
+            }
+            leaveToTab("今日")
+            _ = openBaselineAgain()
+        } else {
+            shot("\(prefix)-baseline-writing", area: "基线", title: "独立短文没有打开", orientation: orientation,
+                 did: "没有进入“独立短文”。", issue: "准备页没有出现。")
+        }
+
+        if tapButton("开始", nearest: "词汇自测"), waitForTitle("词汇自测", timeout: 6) {
+            shot("\(prefix)-baseline-vocab", area: "基线", title: "词汇自测", orientation: orientation,
+                 did: "打开“词汇自测”。没有答题。", issue: "")
+            leaveToTab("今日")
+        } else {
+            shot("\(prefix)-baseline-vocab", area: "基线", title: "词汇自测没有打开", orientation: orientation,
+                 did: "没有进入“词汇自测”。", issue: "自测页没有出现。")
+        }
+    }
+
+    @discardableResult
+    private func openBaselineAgain() -> Bool {
+        if currentTitle() == "建立基线" { return true }
+        if !openTab("今日") { return false }
+        return tapButton("开始", nearest: "建立基线") && waitForTitle("建立基线", timeout: 6)
+    }
+
+    private func walkLibraryAndReader(prefix: String, orientation: String) {
+        guard openTab("书架") else {
+            shot("\(prefix)-library", area: "书架", title: "书架没有打开", orientation: orientation,
+                 did: "点“书架”，页面没有切过去。", issue: "标签点不到。")
             return
         }
-        shot("30-settings", area: "设置", title: "设置",
-             did: "打开“设置”的上半部分。",
-             issue: "")
-        openSettings("学习计划与提醒", id: "31-settings-study", title: "学习计划与提醒")
-        if tapText("词汇复习") {
-            shot("32-settings-vocab", area: "设置", title: "词汇复习",
-                 did: "在设置里点了“词汇复习”。",
-                 issue: "")
-            if tapText("从 CSV 导入旧生词") {
-                shot("33-settings-csv", area: "设置", title: "从 CSV 导入旧生词",
-                     did: "从词汇设置点进 CSV 导入。没有选择文件。",
-                     issue: "")
-                goBack()
-            } else {
-                shot("33-settings-csv", area: "设置", title: "CSV 导入没有打开",
-                     did: "词汇设置里没有点到“从 CSV 导入旧生词”。",
-                     issue: "导入页没有出现。")
-            }
-            goBack()
+        _ = reveal(article) || reveal("High and dry")
+        let filled = sees(article) || sees("High and dry") || sees("All the things we do not see")
+        shot("\(prefix)-library", area: "书架", title: filled ? "书架" : "书架（没看到文章）", orientation: orientation,
+             did: "打开“书架”。",
+             issue: filled ? "" : "这一屏没有三篇文章的标题。")
+
+        guard filled, openRow(article, expectTitle: article) || waitForTitle(article, timeout: 4) else {
+            shot("\(prefix)-reader", area: "听读", title: "正文没有打开", orientation: orientation,
+                 did: "点文章标题“\(article)”，没有进入听读。当时停在：\(currentTitle())。",
+                 issue: "听读页没有出现。")
+            return
+        }
+        shot("\(prefix)-reader", area: "听读", title: "听读正文", orientation: orientation,
+             did: "从书架打开“\(article)”。", issue: "")
+
+        if tapControl("播放") {
+            pause(1.2)
+            let playing = buttonExists("暂停")
+            shot("\(prefix)-reader-play", area: "听读", title: playing ? "正在朗读" : "点了播放", orientation: orientation,
+                 did: "点了播放器的“播放”。", issue: playing ? "" : "按钮没有变成“暂停”。")
+            _ = tapControl("暂停")
         } else {
-            shot("32-settings-vocab", area: "设置", title: "词汇复习没有打开",
-                 did: "在设置里找“词汇复习”，没有点到。",
+            shot("\(prefix)-reader-play", area: "听读", title: "没有点到播放", orientation: orientation,
+                 did: "正文页上没有点到“播放”。", issue: "朗读控制没有出现。")
+        }
+
+        if tapControl("显示中文翻译") {
+            pause(0.6)
+            let hidden = buttonExists("隐藏中文翻译")
+            shot("\(prefix)-reader-zh", area: "听读", title: hidden ? "已显示中文翻译" : "点了显示中文翻译",
+                 orientation: orientation,
+                 did: "点了“显示中文翻译”。", issue: hidden ? "" : "按钮没有变成“隐藏中文翻译”。")
+        } else if buttonExists("隐藏中文翻译") {
+            shot("\(prefix)-reader-zh", area: "听读", title: "中文翻译已经开着", orientation: orientation,
+                 did: "正文页上的按钮已经是“隐藏中文翻译”，说明译文正显示着。", issue: "")
+        } else {
+            shot("\(prefix)-reader-zh", area: "听读", title: "没有点到中文翻译", orientation: orientation,
+                 did: "没有找到“显示中文翻译”或“更多”里的这一项。", issue: "翻译开关没有点到。")
+        }
+
+        if tapControl("理解题") {
+            let quiz = waitToSee("理解题", timeout: 8)
+            shot("\(prefix)-reader-quiz", area: "听读", title: quiz ? "文章理解题" : "理解题没有打开",
+                 orientation: orientation,
+                 did: "在听读页点了“理解题”。没有提交答案。",
+                 issue: quiz ? "" : "理解题页面没有出现。")
+            if quiz { _ = tapButtonExact("关闭", timeout: 3) }
+        } else {
+            shot("\(prefix)-reader-quiz", area: "听读", title: "没有点到理解题", orientation: orientation,
+                 did: "听读工具栏里没有点到“理解题”。", issue: "理解题没有打开。")
+        }
+
+        if tapControl("专注模式") {
+            pause(0.5)
+            shot("\(prefix)-reader-focus", area: "听读", title: "专注模式", orientation: orientation,
+                 did: "点了“专注模式”。", issue: buttonExists("退出专注") ? "" : "没有看到“退出专注”。")
+            _ = tapControl("退出专注")
+        }
+        leaveToTab("书架")
+    }
+
+    private func walkShadow(prefix: String, orientation: String) {
+        guard openTab("跟读") else {
+            shot("\(prefix)-shadow", area: "跟读", title: "跟读没有打开", orientation: orientation,
+                 did: "点“跟读”，页面没有切过去。", issue: "标签点不到。")
+            return
+        }
+        if !sees("练习模式") {
+            _ = reveal(article)
+            _ = tapContaining(article)
+            pause(1.0)
+        }
+        let opened = sees("练习模式") || sees("听后模仿")
+        shot("\(prefix)-shadow", area: "跟读", title: opened ? "跟读工作台" : "跟读文章没有打开",
+             orientation: orientation,
+             did: opened ? "在跟读里打开“\(article)”。" : "跟读列表里没有点开文章。",
+             issue: opened ? "" : "四种练习的切换没有出现。")
+        guard opened else { return }
+
+        let modes = ["听后模仿", "影子跟读", "独立朗读", "脱稿复述"]
+        for mode in modes {
+            if mode != "听后模仿" { _ = tapSegment(mode) }
+            pause(0.5)
+            shot("\(prefix)-shadow-\(modeSlug(mode))", area: "跟读", title: mode, orientation: orientation,
+                 did: "切到“\(mode)”。没有点录音。",
+                 issue: sees(mode) ? "" : "这一屏没有看到“\(mode)”。")
+        }
+        if buttonExists("听原句") {
+            _ = tapSegment("听后模仿")
+            _ = tapButtonExact("听原句", timeout: 2)
+            pause(0.8)
+            shot("\(prefix)-shadow-listen", area: "跟读", title: "听原句", orientation: orientation,
+                 did: "在“听后模仿”点了“听原句”。没有点“录音”。", issue: "")
+        }
+    }
+
+    private func walkIELTS(prefix: String, orientation: String) {
+        guard openTab("雅思") else {
+            shot("\(prefix)-ielts", area: "雅思", title: "雅思没有打开", orientation: orientation,
+                 did: "点“雅思”，页面没有切过去。", issue: "标签点不到。")
+            return
+        }
+        _ = tapSegment("口语")
+        _ = tapSegment("基础训练")
+        shot("\(prefix)-ielts-speaking-basic", area: "雅思", title: "口语基础", orientation: orientation,
+             did: "雅思页选了“口语”和“基础训练”。", issue: "")
+        openSession(prefix: prefix, orientation: orientation, id: "ielts-speaking-session",
+                    row: "How often do you use your phone", title: "基础口语", area: "雅思")
+
+        _ = tapSegment("考试题型")
+        pause(0.4)
+        shot("\(prefix)-ielts-speaking-exam", area: "雅思", title: "口语考试题型", orientation: orientation,
+             did: "口语下切到“考试题型”。", issue: "")
+        openSession(prefix: prefix, orientation: orientation, id: "ielts-mock",
+                    row: "口语完整模拟", title: "口语完整模拟", area: "雅思")
+        openSession(prefix: prefix, orientation: orientation, id: "ielts-part2",
+                    row: "Describe a practical skill", title: "口语 Part 2", area: "雅思")
+
+        _ = tapSegment("写作")
+        _ = tapSegment("基础训练")
+        pause(0.4)
+        shot("\(prefix)-ielts-writing-basic", area: "雅思", title: "写作基础", orientation: orientation,
+             did: "切到“写作”和“基础训练”。", issue: "")
+        openSession(prefix: prefix, orientation: orientation, id: "ielts-writing-session",
+                    row: "Some people say smartphones", title: "基础写作", area: "雅思")
+
+        _ = tapSegment("考试题型")
+        pause(0.4)
+        _ = reveal("Average daily bike rentals")
+        shot("\(prefix)-ielts-writing-exam", area: "雅思", title: "写作考试题型", orientation: orientation,
+             did: "写作下切到“考试题型”。", issue: "")
+        openSession(prefix: prefix, orientation: orientation, id: "ielts-task1",
+                    row: "Average daily bike rentals", title: "写作 Task 1", area: "雅思")
+        openSession(prefix: prefix, orientation: orientation, id: "ielts-task2",
+                    row: "In many places, people can now pay", title: "写作 Task 2", area: "雅思")
+    }
+
+    private func openSession(prefix: String, orientation: String, id: String, row: String, title: String, area: String) {
+        if openRow(row, expectTitle: title) || waitForTitle(title, timeout: 4) {
+            shot("\(prefix)-\(id)", area: area, title: title, orientation: orientation,
+                 did: "打开“\(title)”。没有开始录音，也没有输入文字。", issue: "")
+            leaveToTab("雅思")
+        } else {
+            shot("\(prefix)-\(id)", area: area, title: "\(title)没有打开", orientation: orientation,
+                 did: "点“\(row)”后标题仍是“\(currentTitle())”。",
                  issue: "这一页没有出现。")
         }
-        openSettings("阅读字号与标注", id: "34-settings-reader", title: "阅读字号与标注")
-        openSettings("声音与速度", id: "35-settings-audio", title: "声音与速度")
     }
 
-    func test06SettingsRest() {
-        launchApp()
-        guard openTab("设置") else {
-            shot("36-settings-resources", area: "设置", title: "设置没有打开",
-                 did: "再次打开设置失败。",
-                 issue: "标签点不到。")
+    private func walkVocab(prefix: String, orientation: String) {
+        guard openTab("词汇") else {
+            shot("\(prefix)-vocab-review", area: "词汇", title: "词汇没有打开", orientation: orientation,
+                 did: "点“词汇”，页面没有切过去。", issue: "标签点不到。")
             return
         }
-        openSettings("资源清单", id: "36-settings-resources", title: "资源清单")
-        openSettings("能力清单：断网能做什么", id: "37-settings-capability", title: "能力清单", expect: "能力清单")
-        openSettings("导出的文件里有什么", id: "38-settings-privacy", title: "隐私", expect: "隐私")
-
-        if tapText("立即完整备份") {
-            pause(0.8)
-            shot("39-settings-backup", area: "设置", title: "完整备份",
-                 did: "点了“立即完整备份”。没有点“继续：打包并选择保存位置”。",
-                 issue: "")
-            if !tapButtonExact("取消") { goBack() }
-        } else {
-            shot("39-settings-backup", area: "设置", title: "完整备份没有打开",
-                 did: "设置里没有点到“立即完整备份”。",
-                 issue: "备份说明页没有出现。")
+        let pages = [("复习", "review"), ("浏览", "browse"), ("听词", "listen"), ("拼写", "spell"), ("词群", "chunks")]
+        for (title, slug) in pages {
+            _ = tapSegment(title)
+            pause(0.5)
+            shot("\(prefix)-vocab-\(slug)", area: "词汇", title: "词汇 · \(title)", orientation: orientation,
+                 did: "词汇子页切到“\(title)”。", issue: "")
         }
+    }
 
-        if tapText("从备份恢复") {
-            pause(0.8)
-            shot("40-settings-restore", area: "设置", title: "从备份恢复",
-                 did: "点了“从备份恢复”。没有选择备份文件。",
-                 issue: "")
-            if !tapButtonExact("关闭") { goBack() }
-        } else {
-            shot("40-settings-restore", area: "设置", title: "从备份恢复没有打开",
-                 did: "设置里没有点到“从备份恢复”。",
-                 issue: "恢复页没有出现。")
+    private func walkProgress(prefix: String, orientation: String) {
+        guard openTab("进度") else {
+            shot("\(prefix)-progress-7", area: "进度", title: "进度没有打开", orientation: orientation,
+                 did: "点“进度”，页面没有切过去。", issue: "标签点不到。")
+            return
         }
+        shot("\(prefix)-progress-7", area: "进度", title: "进度 · 最近 7 天", orientation: orientation,
+             did: "打开“进度”。默认是最近 7 天。", issue: "")
+        if tapButtonExact("最近 30 天") || tapContaining("最近 30 天") {
+            pause(0.5)
+            shot("\(prefix)-progress-30", area: "进度", title: "进度 · 最近 30 天", orientation: orientation,
+                 did: "点了“最近 30 天”。", issue: "")
+        } else {
+            shot("\(prefix)-progress-30", area: "进度", title: "最近 30 天没有点到", orientation: orientation,
+                 did: "进度页上没有点到“最近 30 天”。", issue: "窗口没有切换。")
+        }
+    }
 
-        openSettings("录音占用与清理", id: "41-settings-recordings", title: "录音占用与清理")
-        if tapText("使用说明") {
-            shot("42-settings-guide", area: "设置", title: "使用说明",
-                 did: "在设置里点了“使用说明”。",
-                 issue: "")
-            if tapText("听读") {
-                shot("43-settings-guide-listening", area: "设置", title: "使用说明 · 听读",
-                     did: "在使用说明里点了“听读”。这是说明文字，不是听读器。",
-                     issue: "听读器和“显示中文翻译”要先有文章才能打开。仓库里没有内容包。")
-                goBack()
-            } else {
-                shot("43-settings-guide-listening", area: "设置", title: "使用说明里的听读没有打开",
-                     did: "使用说明列表里没有点到“听读”。",
-                     issue: "说明页没有出现。听读器本身也打不开：没有文章。")
+    private func walkSettings(prefix: String, orientation: String) {
+        guard openTab("设置") else {
+            shot("\(prefix)-settings", area: "设置", title: "设置没有打开", orientation: orientation,
+                 did: "点“设置”，页面没有切过去。", issue: "标签点不到。")
+            return
+        }
+        _ = reveal("资源与能力")
+        shot("\(prefix)-settings", area: "设置", title: "设置", orientation: orientation,
+             did: "打开“设置”。", issue: "")
+
+        let links: [(String, String, String)] = [
+            ("学习计划与提醒", "settings-plan", "学习计划与提醒"),
+            ("词汇复习", "settings-vocab", "词汇设置"),
+            ("阅读字号与标注", "settings-type", "阅读字号与标注"),
+            ("声音与速度", "settings-audio", "声音与速度"),
+            ("资源清单", "settings-resources", "资源清单"),
+            ("能力清单", "settings-capability", "能力清单"),
+            ("导出的文件里有什么", "settings-privacy", "隐私"),
+            ("录音占用与清理", "settings-recordings", "录音占用与清理"),
+            ("使用说明", "settings-guide", "使用说明"),
+        ]
+        for (label, id, title) in links {
+            openSettings(prefix: prefix, orientation: orientation, label: label, id: id, title: title)
+        }
+        if currentTitle() == "使用说明" || openSettingsLink("使用说明", expect: "使用说明") {
+            if openRow("每天怎么用", expectTitle: "每天怎么用") || waitForTitle("每天怎么用", timeout: 4) {
+                shot("\(prefix)-settings-guide-topic", area: "设置", title: "使用说明 · 每天怎么用", orientation: orientation,
+                     did: "在使用说明里打开“每天怎么用”。", issue: "")
+                leaveToTab("设置")
             }
-            goBack()
-        } else {
-            shot("42-settings-guide", area: "设置", title: "使用说明没有打开",
-                 did: "在设置里找“使用说明”，没有点到。",
-                 issue: "使用说明没有出现。")
         }
+
+        if tapButtonExact("立即完整备份", timeout: 3), waitForTitle("完整备份", timeout: 6) || waitToSee("备份里有", timeout: 3) {
+            shot("\(prefix)-settings-backup", area: "设置", title: "完整备份", orientation: orientation,
+                 did: "点了“立即完整备份”。没有点“继续”，没有生成文件。", issue: "")
+            _ = tapButtonExact("取消", timeout: 3)
+            pause(0.4)
+        } else {
+            shot("\(prefix)-settings-backup", area: "设置", title: "完整备份没有打开", orientation: orientation,
+                 did: "没有打开“完整备份”。", issue: "备份说明页没有出现。")
+            leaveToTab("设置")
+        }
+
+        if tapButtonExact("从备份恢复", timeout: 3), waitForTitle("从备份恢复", timeout: 6) || waitToSee("选择备份", timeout: 3) || waitToSee("备份文件", timeout: 2) {
+            shot("\(prefix)-settings-restore", area: "设置", title: "从备份恢复", orientation: orientation,
+                 did: "点了“从备份恢复”。没有选择文件。", issue: "")
+            _ = tapButtonExact("关闭", timeout: 3)
+        } else {
+            shot("\(prefix)-settings-restore", area: "设置", title: "从备份恢复没有打开", orientation: orientation,
+                 did: "没有打开“从备份恢复”。", issue: "恢复页没有出现。")
+        }
+    }
+
+    private func openSettings(prefix: String, orientation: String, label: String, id: String, title: String) {
+        if openSettingsLink(label, expect: title) {
+            shot("\(prefix)-\(id)", area: "设置", title: title, orientation: orientation,
+                 did: "在设置里点了“\(label)”。", issue: "")
+            if title == "资源清单" {
+                if openRow(article, expectTitle: "文章资源") || waitForTitle("文章资源", timeout: 4) {
+                    shot("\(prefix)-settings-article-resource", area: "设置", title: "文章资源", orientation: orientation,
+                         did: "在资源清单里打开“\(article)”。", issue: "")
+                    _ = goBack()
+                }
+            }
+            leaveToTab("设置")
+        } else {
+            shot("\(prefix)-\(id)", area: "设置", title: "\(title)没有打开", orientation: orientation,
+                 did: "点“\(label)”后标题仍是“\(currentTitle())”。",
+                 issue: "这一页没有出现。")
+            leaveToTab("设置")
+        }
+    }
+
+    @discardableResult
+    private func openSettingsLink(_ label: String, expect: String) -> Bool {
+        if currentTitle() == expect { return true }
+        if currentTitle() != "设置" { leaveToTab("设置") }
+        return openRow(label, expectTitle: expect) || waitForTitle(expect, timeout: 3)
     }
 
     // MARK: Launch and tabs
 
-    private func launchApp() {
+    private func launchFresh(_ orientation: UIDeviceOrientation) {
         app.launch()
-        XCUIDevice.shared.orientation = .landscapeLeft
         _ = app.navigationBars.firstMatch.waitForExistence(timeout: 30)
+        setOrientation(orientation)
+    }
+
+    private func relaunch(_ orientation: UIDeviceOrientation) {
+        app.terminate()
+        launchFresh(orientation)
+    }
+
+    private func setOrientation(_ orientation: UIDeviceOrientation) {
+        XCUIDevice.shared.orientation = orientation
         pause(1.0)
     }
 
     @discardableResult
     private func openTab(_ name: String) -> Bool {
-        if app.navigationBars[name].exists { return true }
+        if app.navigationBars[name].exists, currentTitle() == name { return true }
         let exact = NSPredicate(format: "label == %@", name)
         let queries = [
             app.tabBars.buttons.matching(exact),
@@ -417,7 +531,7 @@ final class WalkUITests: XCTestCase {
             let el = query.firstMatch
             if el.waitForExistence(timeout: 2), el.isHittable {
                 el.tap()
-                pause(0.7)
+                pause(0.6)
                 if app.navigationBars[name].waitForExistence(timeout: 4) { return true }
             }
         }
@@ -425,109 +539,114 @@ final class WalkUITests: XCTestCase {
             let toggle = app.buttons[label]
             if toggle.exists, toggle.isHittable {
                 toggle.tap()
-                pause(0.4)
+                pause(0.3)
                 break
             }
         }
         let again = app.buttons.matching(exact).firstMatch
         if again.exists, again.isHittable {
             again.tap()
-            pause(0.7)
+            pause(0.6)
         }
-        let opened = app.navigationBars[name].waitForExistence(timeout: 4)
-        if !opened {
-            print("DDU_HIER \(name) \(app.debugDescription.prefix(2500))")
+        return app.navigationBars[name].waitForExistence(timeout: 4)
+    }
+
+    private func leaveToTab(_ name: String) {
+        if app.sheets.firstMatch.exists || buttonExists("关闭") && currentTitle() != name {
+            _ = tapButtonExact("关闭", timeout: 1)
         }
-        return opened
+        for _ in 0..<3 {
+            if currentTitle() == name { return }
+            if !goBack() { break }
+        }
+        if currentTitle() != name { _ = openTab(name) }
     }
 
     // MARK: Taps
 
-    /// Detail titles, longest first. Tab names stay last so a pushed page wins over the sidebar.
     private static let screenTitles = [
         "学习计划与提醒", "无准备录音", "独立短文", "词汇自测", "建立基线",
         "口语完整模拟", "口语 Part 2", "基础口语", "基础写作", "写作 Task 1", "写作 Task 2",
-        "词汇设置", "阅读字号与标注", "声音与速度", "资源清单", "能力清单", "完整备份",
-        "从备份恢复", "录音占用与清理", "使用说明", "选一篇文章", "隐私", "听读",
+        "词汇设置", "阅读字号与标注", "声音与速度", "资源清单", "文章资源", "能力清单",
+        "完整备份", "从备份恢复", "录音占用与清理", "使用说明", "每天怎么用", "隐私",
+        "导入内容包", "A new age of the orator", "High and dry", "All the things we do not see",
         "今日", "书架", "跟读", "雅思", "词汇", "进度", "设置",
     ]
 
     private func currentTitle() -> String {
         let tabs: Set<String> = ["今日", "书架", "跟读", "雅思", "词汇", "进度", "设置"]
-        var found: [String] = []
-        for bar in app.navigationBars.allElementsBoundByIndex {
-            if let name = Self.screenTitles.first(where: { bar.staticTexts[$0].exists }) {
-                found.append(name)
-                continue
-            }
-            let title = bar.identifier.isEmpty ? bar.label : bar.identifier
-            if !title.isEmpty { found.append(title) }
+        for name in Self.screenTitles where !tabs.contains(name) && app.navigationBars[name].exists {
+            return name
         }
-        if let detail = found.last(where: { !tabs.contains($0) }) { return detail }
-        if let any = found.last { return any }
-        return Self.screenTitles.first { app.staticTexts[$0].exists && !tabs.contains($0) } ?? ""
+        for name in Self.screenTitles where tabs.contains(name) && app.navigationBars[name].exists {
+            return name
+        }
+        return ""
     }
 
-    private func relaunch() {
-        app.terminate()
-        launchApp()
-    }
-
-    /// Taps a row. Returns true when the navigation title changes to something containing `expectTitle`,
-    /// or when `expectTitle` is nil and the title changes at all.
     @discardableResult
-    private func openRow(_ text: String, expectTitle: String? = nil) -> Bool {
+    private func waitForTitle(_ name: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if currentTitle() == name || app.navigationBars[name].exists { return true }
+            pause(0.25)
+        }
+        return currentTitle() == name
+    }
+
+    @discardableResult
+    private func openRow(_ text: String, expectTitle: String) -> Bool {
         guard reveal(text) else { return false }
         let before = currentTitle()
         let pred = NSPredicate(format: "label CONTAINS %@", text)
-        var pool: [XCUIElement] = []
-        for query in [app.cells, app.buttons, app.links, app.staticTexts] {
-            pool.append(contentsOf: query.matching(pred).allElementsBoundByIndex)
-        }
-        let usable = pool.filter { el in
+        let queries: [XCUIElementQuery] = [app.buttons, app.cells, app.links, app.staticTexts]
+        for query in queries {
+            let el = query.matching(pred).firstMatch
+            guard el.exists else { continue }
             let frame = el.frame
-            return frame.width > 80 && frame.height > 18 && frame.minY > 20
-        }
-        let ordered = usable.sorted { lhs, rhs in
-            let rank: (XCUIElement) -> Int = { el in
-                switch el.elementType {
-                case .cell: return 0
-                case .button, .link: return 1
-                default: return 2
-                }
+            guard frame.width > 40, frame.height > 16 else { continue }
+            el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            pause(0.9)
+            if currentTitle() != before, currentTitle() == expectTitle || app.navigationBars[expectTitle].exists {
+                return true
             }
-            if rank(lhs) != rank(rhs) { return rank(lhs) < rank(rhs) }
-            return lhs.frame.width > rhs.frame.width
-        }
-        for target in ordered.prefix(4) {
-            for x in [0.5, 0.25, 0.75] as [CGFloat] {
-                target.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.5)).tap()
-                pause(1.0)
-                let title = currentTitle()
-                if title == before { continue }
-                if let expectTitle {
-                    if title.contains(expectTitle) { return true }
-                } else {
-                    return true
-                }
-                if !goBack() { relaunch() }
+            if currentTitle() != before, currentTitle() != expectTitle {
+                _ = goBack()
                 _ = reveal(text)
             }
         }
-        print("DDU_HIER row \(text) title=\(currentTitle()) cells=\(app.cells.count)")
-        return false
+        return app.navigationBars[expectTitle].exists
     }
 
     @discardableResult
     private func tapText(_ text: String) -> Bool {
-        if openRow(text) { return true }
-        if !reveal(text) { return false }
+        guard reveal(text) else { return false }
         let pred = NSPredicate(format: "label == %@ OR label BEGINSWITH %@", text, text)
-        for query in [app.buttons, app.cells, app.staticTexts] {
+        for query in [app.buttons, app.staticTexts, app.cells] {
             let el = query.matching(pred).firstMatch
             if el.exists {
                 el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-                pause(0.8)
+                pause(0.7)
+                return true
+            }
+        }
+        return false
+    }
+
+    @discardableResult
+    private func tapContaining(_ text: String) -> Bool {
+        if neverTap.contains(text) { return false }
+        let pred = NSPredicate(format: "label CONTAINS %@", text)
+        for query in [app.buttons, app.sheets.buttons, app.cells, app.staticTexts] {
+            let el = query.matching(pred).firstMatch
+            if el.exists, el.isHittable {
+                el.tap()
+                pause(0.7)
+                return true
+            }
+            if el.exists {
+                el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                pause(0.7)
                 return true
             }
         }
@@ -536,122 +655,104 @@ final class WalkUITests: XCTestCase {
 
     @discardableResult
     private func tapButtonExact(_ name: String, timeout: TimeInterval = 3) -> Bool {
+        if neverTap.contains(name) { return false }
         let pred = NSPredicate(format: "label == %@", name)
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            for query in [app.buttons, app.sheets.buttons, app.alerts.buttons, app.scrollViews.buttons] {
+            for query in [app.buttons, app.sheets.buttons, app.alerts.buttons] {
                 let button = query.matching(pred).firstMatch
-                if button.exists {
+                if button.exists, button.isEnabled {
                     if button.isHittable {
                         button.tap()
                     } else {
                         button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
                     }
-                    pause(0.7)
+                    pause(0.6)
                     return true
                 }
             }
-            Thread.sleep(forTimeInterval: 0.25)
+            pause(0.25)
+        }
+        return false
+    }
+
+    /// Toolbar item, or the same item inside the “更多” menu on a narrower column.
+    @discardableResult
+    private func tapControl(_ name: String) -> Bool {
+        if tapButtonExact(name, timeout: 2) { return true }
+        if tapButtonExact("更多", timeout: 2) || tapButtonExact("更多操作", timeout: 1) {
+            pause(0.3)
+            if tapButtonExact(name, timeout: 2) { return true }
         }
         return false
     }
 
     @discardableResult
+    private func tapSegment(_ name: String) -> Bool {
+        if neverTap.contains(name) { return false }
+        let pred = NSPredicate(format: "label == %@", name)
+        for query in [app.buttons, app.segmentedControls.buttons, app.switches] {
+            let el = query.matching(pred).firstMatch
+            if el.exists {
+                if el.isHittable { el.tap() } else { el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+                pause(0.45)
+                return true
+            }
+        }
+        return tapContaining(name)
+    }
+
+    @discardableResult
     private func tapButton(_ name: String, nearest anchorText: String) -> Bool {
+        if neverTap.contains(name) { return false }
         guard reveal(anchorText) else { return false }
         let anchor = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", anchorText)).firstMatch
         guard anchor.exists else { return false }
         let pred = NSPredicate(format: "label == %@", name)
-        let buttons = app.buttons.matching(pred).allElementsBoundByIndex.filter(\.exists)
+        var best: XCUIElement?
+        var bestDy = CGFloat.greatestFiniteMagnitude
         let y = anchor.frame.midY
-        guard let chosen = buttons.min(by: { abs($0.frame.midY - y) < abs($1.frame.midY - y) }) else {
-            return false
+        let matches = app.buttons.matching(pred)
+        let count = min(matches.count, 8)
+        for index in 0..<count {
+            let button = matches.element(boundBy: index)
+            guard button.exists, button.isEnabled else { continue }
+            let dy = abs(button.frame.midY - y)
+            if dy < bestDy {
+                bestDy = dy
+                best = button
+            }
         }
+        guard let chosen = best else { return false }
         if chosen.isHittable {
             chosen.tap()
         } else {
             chosen.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
-        pause(0.9)
+        pause(0.7)
         return true
     }
 
-    @discardableResult
-    private func tapCell(containing text: String) -> Bool {
-        let pred = NSPredicate(format: "label CONTAINS %@", text)
-        if !reveal(text) {
-            let cell = app.cells.matching(pred).firstMatch
-            if !cell.exists { return false }
-        }
-        let cell = app.cells.matching(pred).firstMatch
-        if cell.exists, cell.isHittable {
-            cell.tap()
-            pause(0.8)
-            return true
-        }
-        let textEl = app.staticTexts.matching(pred).firstMatch
-        if textEl.exists {
-            textEl.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-            pause(0.8)
-            return true
-        }
-        return false
-    }
-
-    private func tapFirstCell(skipping: [String], skipContaining: [String] = []) -> Bool {
-        for cell in app.cells.allElementsBoundByIndex where cell.isHittable {
-            let label = cell.label
-            if label.count < 8 { continue }
-            if skipContaining.contains(where: { label.contains($0) }) { continue }
-            if skipping.contains(where: { label == $0 || label.hasPrefix($0) && label.count < $0.count + 4 }) {
-                continue
-            }
-            cell.tap()
-            pause(0.8)
-            return true
-        }
-        return false
-    }
-
-    private func tapFirstCell(containingAny needles: [String]) -> Bool {
-        for cell in app.cells.allElementsBoundByIndex where cell.isHittable {
-            let label = cell.label
-            if needles.contains(where: { label.contains($0) }) {
-                cell.tap()
-                pause(0.8)
-                return true
-            }
-        }
-        for needle in needles where reveal(needle) {
-            return tapCell(containing: needle)
-        }
-        return false
-    }
-
-    private func openSettings(_ label: String, id: String, title: String, expect: String? = nil) {
-        let wanted = expect ?? title
-        if openRow(label, expectTitle: wanted) || (tapText(label) && currentTitle().contains(wanted)) {
-            shot(id, area: "设置", title: title, did: "在设置里点了“\(label)”。", issue: "")
-            if !goBack() { relaunch(); _ = openTab("设置") }
-        } else {
-            shot(id, area: "设置", title: "\(title)没有打开",
-                 did: "在设置里找“\(label)”，点了以后标题仍是“\(currentTitle())”。",
-                 issue: "这一页没有出现。上面这张图是当时停住的界面。")
-        }
+    private func buttonExists(_ name: String) -> Bool {
+        app.buttons.matching(NSPredicate(format: "label == %@ OR label CONTAINS %@", name, name)).firstMatch.exists
     }
 
     @discardableResult
-    private func reveal(_ text: String, attempts: Int = 7) -> Bool {
+    private func reveal(_ text: String, attempts: Int = 6) -> Bool {
         if elementExists(text) { return true }
         for _ in 0..<attempts {
             scrollContent(up: false)
             if elementExists(text) { return true }
         }
-        for _ in 0..<attempts {
+        for _ in 0..<3 {
             scrollContent(up: true)
             if elementExists(text) { return true }
         }
         return elementExists(text)
+    }
+
+    private func sees(_ text: String) -> Bool {
+        elementExists(text)
     }
 
     private func elementExists(_ text: String) -> Bool {
@@ -661,86 +762,111 @@ final class WalkUITests: XCTestCase {
             || app.cells.matching(pred).firstMatch.exists
     }
 
+    private func waitToSee(_ text: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if elementExists(text) { return true }
+            pause(0.35)
+        }
+        return elementExists(text)
+    }
+
+    private func waitEnabled(_ snippet: String, timeout: TimeInterval) -> Bool {
+        let pred = NSPredicate(format: "label CONTAINS %@", snippet)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let button = app.buttons.matching(pred).firstMatch
+            if button.exists, button.isEnabled { return true }
+            pause(0.35)
+        }
+        let button = app.buttons.matching(pred).firstMatch
+        return button.exists && button.isEnabled
+    }
+
+    private func waitToSeeButton(_ name: String, timeout: TimeInterval) -> Bool {
+        let pred = NSPredicate(format: "label == %@", name)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if app.buttons.matching(pred).firstMatch.exists { return true }
+            pause(0.4)
+        }
+        return app.buttons.matching(pred).firstMatch.exists
+    }
+
     @discardableResult
     private func goBack() -> Bool {
         let before = currentTitle()
+        let labels = ["返回", "Back", "今日", "书架", "跟读", "雅思", "词汇", "进度", "设置", "使用说明", "建立基线"]
         let nav = app.navigationBars.firstMatch
-        let labels = ["返回", "Back", "今日", "书架", "跟读", "雅思", "词汇", "进度", "设置", "使用说明", "词汇复习"]
         if nav.exists {
-            let buttons = nav.buttons.allElementsBoundByIndex.sorted { $0.frame.minX < $1.frame.minX }
-            for button in buttons where labels.contains(button.label) || button.label.hasPrefix("返回") {
-                button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-                pause(0.8)
-                if currentTitle() != before { return true }
+            let buttons = nav.buttons
+            let count = min(buttons.count, 6)
+            var ordered: [XCUIElement] = []
+            for index in 0..<count {
+                let button = buttons.element(boundBy: index)
+                if button.exists { ordered.append(button) }
             }
-            if let left = buttons.first {
-                left.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-                pause(0.8)
+            ordered.sort { $0.frame.minX < $1.frame.minX }
+            for button in ordered where labels.contains(button.label) || button.label.hasPrefix("返回") {
+                button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                pause(0.6)
                 if currentTitle() != before { return true }
             }
         }
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.45))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.55, dy: 0.45))
-        start.press(forDuration: 0.08, thenDragTo: end)
-        pause(0.8)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.28, dy: 0.5))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.85, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        pause(0.6)
         return currentTitle() != before
     }
 
-    private func dismissPickerThenEnsure(tab: String) {
-        if tapButtonExact("取消", timeout: 2) || tapButtonExact("关闭", timeout: 1) || tapButtonExact("Cancel", timeout: 1) {
-            pause(0.4)
-            return
-        }
-        app.terminate()
-        launchApp()
-        _ = openTab(tab)
-    }
-
     private func scrollContent(up: Bool) {
-        let startY: CGFloat = up ? 0.35 : 0.72
-        let endY: CGFloat = up ? 0.72 : 0.35
+        let startY: CGFloat = up ? 0.38 : 0.72
+        let endY: CGFloat = up ? 0.72 : 0.38
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: startY))
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: endY))
         start.press(forDuration: 0.02, thenDragTo: end)
-        pause(0.4)
+        pause(0.3)
     }
 
     private func pause(_ seconds: TimeInterval) {
         Thread.sleep(forTimeInterval: seconds)
     }
 
-    // MARK: Screenshots
-
-    private func issueIfMissing(_ needles: [String]) -> String {
-        let blob = (app.staticTexts.allElementsBoundByIndex.prefix(40).map(\.label)).joined(separator: "\n")
-        if needles.contains(where: { blob.contains($0) }) { return "" }
-        return "页面上没有看到这些字：" + needles.joined(separator: "、") + "。以这张图为准。"
+    private func modeSlug(_ mode: String) -> String {
+        switch mode {
+        case "听后模仿": return "repeat"
+        case "影子跟读": return "shadowing"
+        case "独立朗读": return "read"
+        case "脱稿复述": return "retell"
+        default: return "mode"
+        }
     }
 
-    private func shot(_ id: String, area: String, title: String, did: String, issue: String) {
-        pause(0.5)
+    // MARK: Screenshots
+
+    private func shot(_ id: String, area: String, title: String, orientation: String, did: String, issue: String) {
+        pause(0.35)
         let screenshot = XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = id
         attachment.lifetime = .keepAlways
         add(attachment)
-
-        let saw = visibleText()
         let record: [String: String] = [
             "id": id,
             "file": "\(id).png",
             "area": area,
             "title": title,
+            "orientation": orientation,
             "did": did,
-            "saw": saw,
+            "saw": visibleText(),
             "issue": issue,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: record),
               let line = String(data: data, encoding: .utf8) else { return }
         print("DDU_SHOT \(line)")
         appendManifest(data)
-        let url = Self.shotDirectory().appendingPathComponent("\(id).png")
-        try? screenshot.pngRepresentation.write(to: url)
+        try? screenshot.pngRepresentation.write(to: Self.shotDirectory().appendingPathComponent("\(id).png"))
     }
 
     private func visibleText() -> String {
@@ -748,17 +874,17 @@ final class WalkUITests: XCTestCase {
         let title = currentTitle()
         if !title.isEmpty { parts.append("导航标题：" + title) }
         let probes = [
-            "还没有文章", "还没有内容包", "建立基线", "短听读", "需要新版内容包",
-            "先跳过这一项", "看题并开始", "开始写", "词库里还没有可用的词",
-            "还没有词条", "听词列表是空的", "还没有词群", "今日暂无到期",
-            "有效练习时间", "最近 30 天", "最近 7 天", "学习计划与提醒",
-            "还没有导入内容包", "从未备份", "每个题目几分钟就能看完",
-            "基础口语：准备", "考试题型", "导入内容包",
+            article, "High and dry", "All the things we do not see",
+            "查看并导入", "导入所选", "3 篇", "The Economist",
+            "建立基线", "短听读", "听一小段", "理解题", "先跳过",
+            "显示中文翻译", "隐藏中文翻译", "暂停", "练习模式",
+            "听后模仿", "影子跟读", "独立朗读", "脱稿复述",
+            "基础训练", "考试题型", "最近 30 天", "最近 7 天",
+            "还没有内容包", "还没有导入内容包",
         ]
-        for probe in probes where app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", probe)).firstMatch.exists {
-            if !parts.contains(where: { $0.contains(probe) }) {
-                parts.append(probe)
-            }
+        for probe in probes where app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", probe)).firstMatch.exists
+            || app.buttons.matching(NSPredicate(format: "label CONTAINS %@", probe)).firstMatch.exists {
+            parts.append(probe)
         }
         return parts.joined(separator: "｜")
     }
@@ -780,11 +906,27 @@ final class WalkUITests: XCTestCase {
 
     private static func shotDirectory() -> URL {
         let env = ProcessInfo.processInfo.environment
-        let raw = env["SIM_SHOT_DIR"]
-            ?? env["TEST_RUNNER_SIM_SHOT_DIR"]
-            ?? "/tmp/ddu-ui-shots"
+        let raw = env["SIM_SHOT_DIR"] ?? env["TEST_RUNNER_SIM_SHOT_DIR"] ?? "/tmp/ddu-ui-shots"
         let url = URL(fileURLWithPath: raw, isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    @discardableResult
+    private func run(_ args: [String]) -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = args
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do {
+            try process.run()
+        } catch {
+            return error.localizedDescription
+        }
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8) ?? ""
     }
 }
