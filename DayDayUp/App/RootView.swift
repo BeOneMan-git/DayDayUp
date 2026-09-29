@@ -42,7 +42,7 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .simultaneousGesture(TapGesture().onEnded { ActivityClock.shared.touch() })
+        .modifier(ActivityTapModifier())
         .onChange(of: router.tab, initial: true) { _, tab in
             ActivityClock.shared.currentCategory = RootView.category(for: tab)
         }
@@ -72,5 +72,17 @@ struct RootView: View {
     /// Spoken by VoiceOver when it is on; nothing happens otherwise.
     static func announce(_ text: String) {
         UIAccessibility.post(notification: .announcement, argument: text)
+    }
+}
+
+/// Counts a tap toward practice time. The UI walk launches with `-ui-testing` and skips this gesture:
+/// a SwiftUI tap gesture on the tab view was swallowing list-row and import-banner clicks in XCTest.
+private struct ActivityTapModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if ProcessInfo.processInfo.arguments.contains("-ui-testing") {
+            content
+        } else {
+            content.simultaneousGesture(TapGesture().onEnded { ActivityClock.shared.touch() })
+        }
     }
 }

@@ -39,7 +39,7 @@ Test 里的三项：
 
 同一份 Test 工作流里还有一个任务叫 `ui-walk`。它用 scheme `UIWalk` 把 DayDayUp 装进上面选中的那台 iPad 模拟器并启动，然后点得开的页面都会截图。`UIWalk` 不在 `DayDayUp` scheme 里，所以不参与未签名 IPA。
 
-仓库里没有 `.ecopack`。书架、听读、中文翻译、跟读工作台、基线理解题、词汇自测题目，没有文章就只能停在空状态。走查不会编造杂志内容，也不会按开始录音。
+仓库里仍然没有 `.ecopack`（公开仓库不放内容包）。`ui-walk` 用本仓库的 GitHub OIDC 令牌向一次走查专用的地址领取 `DayDayUp-2026-09-12-2.ecopack`，放进模拟器 App 的文稿文件夹，并按 `PackImporter.write` 的目录解到 `Application Support/Packs/2026-09-12-2/`。走查不会按开始录音。
 
 截图和中文报告在同一次运行的产物 **ui-walk** 里。下载后打开 `report.html`，图片在同一个目录。
 

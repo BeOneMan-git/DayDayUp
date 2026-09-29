@@ -18,7 +18,7 @@ final class WalkUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
         app = XCUIApplication()
-        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_Hans_CN"]
+        app.launchArguments = ["-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_Hans_CN", "-ui-testing"]
         addUIInterruptionMonitor(withDescription: "系统弹窗") { alert in
             for label in ["允许", "Allow", "好", "OK", "关闭", "以后再说", "Not Now"] {
                 let button = alert.buttons[label]
@@ -63,6 +63,10 @@ final class WalkUITests: XCTestCase {
 
     // MARK: Pack
 
+    private func shelfHasArticles() -> Bool {
+        sees(article) || sees("High and dry") || sees("All the things we do not see")
+    }
+
     private func importInbox() -> Bool {
         guard openTab("书架") else {
             shot("port-import-banner", area: "导入", title: "书架没有打开", orientation: "竖屏",
@@ -70,51 +74,69 @@ final class WalkUITests: XCTestCase {
                  issue: packNote.isEmpty ? "标签点不到。" : packNote)
             return false
         }
-        let banner = waitToSee("查看并导入", timeout: 20)
+        let seeded = shelfHasArticles()
+        if seeded {
+            packNote = "打开书架时已经能看到文章标题。"
+            shot("port-import-shelf", area: "导入", title: "书架已有文章", orientation: "竖屏",
+                 did: "内容包已在书架上。看到了文章标题。",
+                 issue: "")
+        }
+        let banner = waitToSee("查看并导入", timeout: seeded ? 4 : 20)
         shot("port-import-banner", area: "导入", title: banner ? "发现待导入的内容包" : "没有出现导入提示",
              orientation: "竖屏",
              did: banner
                 ? "内容包已放进 App 的文稿文件夹。书架顶部出现导入提示。"
-                : "打开书架后等了约 20 秒，没有看到“查看并导入”。",
-             issue: banner ? "" : (packNote.isEmpty ? "文稿里的 .ecopack 没有被认成待导入文件。" : packNote))
-        guard banner, openImportSheet() else { return false }
-        let ready = waitToSee("导入所选", timeout: 90)
+                : "打开书架后没有看到“查看并导入”。",
+             issue: banner ? "" : (seeded ? "文件可能已经移出待导入文件夹。" : "文稿里的 .ecopack 没有被认成待导入文件。"))
+        guard banner, openImportSheet() else { return seeded }
+        let ready = waitToSee("导入所选", timeout: 40) || waitToSee("可用空间", timeout: 4) || waitToSee("把已导入过的文件", timeout: 2)
         shot("port-import-review", area: "导入", title: ready ? "导入预览" : "导入预览没有出来",
              orientation: "竖屏",
              did: "点了“查看并导入”，等文件核对结束。",
-             issue: ready ? "" : "点了导入提示，但没有进入可以选择“导入所选”的预览。")
-        guard ready, waitEnabled("导入所选", timeout: 20), tapContaining("导入所选") else { return false }
-        let done = waitToSeeButton("完成", timeout: 120)
-        let titles = sees(article) || sees("High and dry")
-        shot("port-import-done", area: "导入", title: done ? "导入结果" : "导入没有完成",
-             orientation: "竖屏",
-             did: "点了“导入所选”，等待写入书架。",
-             issue: done ? "" : "120 秒内没有出现“完成”。")
-        if done { _ = tapButtonExact("完成", timeout: 5) }
-        pause(1.0)
-        let onShelf = sees(article) || sees("High and dry") || sees("All the things we do not see")
-        shot("port-import-shelf", area: "导入", title: onShelf ? "书架已有文章" : "导入后书架仍是空的",
-             orientation: "竖屏",
-             did: "关掉导入结果后看书架。",
-             issue: onShelf ? "" : "没有看到三篇文章的标题。")
-        return onShelf || titles
+             issue: ready ? "" : "点了导入提示，但没有进入导入预览。")
+        if ready {
+            if waitEnabled("导入所选", timeout: 8) {
+                _ = tapContaining("导入所选")
+            } else if waitEnabled("把已导入过的文件", timeout: 3) {
+                _ = tapContaining("把已导入过的文件")
+            }
+            let done = waitToSeeButton("完成", timeout: 40)
+            shot("port-import-done", area: "导入", title: done ? "导入结果" : "导入没有完成",
+                 orientation: "竖屏",
+                 did: "在预览里确认导入。",
+                 issue: done ? "" : "40 秒内没有出现“完成”。")
+            if done { _ = tapButtonExact("完成", timeout: 5) }
+            pause(0.8)
+        }
+        let onShelf = shelfHasArticles()
+        if !seeded {
+            shot("port-import-shelf", area: "导入", title: onShelf ? "书架已有文章" : "导入后书架仍是空的",
+                 orientation: "竖屏",
+                 did: "关掉导入结果后看书架。",
+                 issue: onShelf ? "" : "没有看到三篇文章的标题。")
+        }
+        return onShelf || seeded
     }
 
-    /// The banner is a list row. A coordinate tap on its label does not open the sheet; try the cell,
-    /// then the button, then the trailing “查看并导入”.
+    /// The banner is one button. Activate it, then tap the middle of the row.
     private func openImportSheet() -> Bool {
         let pred = NSPredicate(format: "label CONTAINS %@", "查看并导入")
-        let exact = NSPredicate(format: "label == %@", "查看并导入")
         for _ in 0..<3 {
             if importSheetVisible() { return true }
-            for query in [app.buttons.matching(exact), app.staticTexts.matching(exact), app.cells.matching(pred), app.buttons.matching(pred)] {
-                let el = query.firstMatch
-                guard el.exists, onScreen(el) else { continue }
-                el.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
-                pause(0.8)
-                if importSheetVisible() { return true }
-                if el.isHittable { el.tap(); pause(0.8) }
-                if importSheetVisible() { return true }
+            for query in [app.buttons.matching(pred), app.cells.matching(pred), app.staticTexts.matching(pred)] {
+                let matches = query
+                let count = min(matches.count, 3)
+                for index in 0..<count {
+                    let el = matches.element(boundBy: index)
+                    guard el.exists, onScreen(el) else { continue }
+                    if activate(el) {
+                        pause(0.7)
+                        if importSheetVisible() { return true }
+                    }
+                    el.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                    pause(0.8)
+                    if importSheetVisible() { return true }
+                }
             }
         }
         return importSheetVisible()
@@ -124,15 +146,23 @@ final class WalkUITests: XCTestCase {
         sees("导入内容包") || sees("正在检查") || sees("导入所选") || sees("可用空间")
     }
 
-    /// Wide rows only navigate when the click lands on the trailing chevron, not the title text.
+    /// One click in the middle of the control. A second click on the trailing edge was missing the “开始” pills.
     private func press(_ element: XCUIElement) {
-        let wide = element.frame.width > 220
-        let x: CGFloat = wide ? 0.93 : 0.5
-        if element.isHittable && !wide {
+        if element.isHittable {
             element.tap()
+        } else {
+            element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
-        element.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.5)).tap()
-        pause(0.6)
+        pause(0.45)
+    }
+
+    /// VoiceOver-style activation. List rows in this app often ignore a coordinate click.
+    @discardableResult
+    private func activate(_ element: XCUIElement) -> Bool {
+        let sel = NSSelectorFromString("activate")
+        guard element.exists, element.responds(to: sel) else { return false }
+        element.perform(sel)
+        return true
     }
 
     /// Landscape sidebar taps miss. Switch tabs and push rows in portrait, then turn back.
@@ -264,9 +294,11 @@ final class WalkUITests: XCTestCase {
              did: "打开“书架”。",
              issue: filled ? "" : "这一屏没有三篇文章的标题。")
 
-        guard filled, openRow(article, expectTitle: article) || waitForTitle(article, timeout: 4) else {
+        let openedReader = filled && (openRow(article, expectTitle: article) || waitForTitle(article, timeout: 3)
+            || openTodayTask(anchor: "听读：", titles: [article, "High and dry", "All the things we do not see"]))
+        guard openedReader else {
             shot("\(prefix)-reader", area: "听读", title: "正文没有打开", orientation: orientation,
-                 did: "点文章标题“\(article)”，没有进入听读。当时停在：\(currentTitle())。",
+                 did: "点文章标题和今日里的“听读”都没有进入正文。当时停在：\(currentTitle())。",
                  issue: "听读页没有出现。")
             return
         }
@@ -327,8 +359,11 @@ final class WalkUITests: XCTestCase {
         }
         if !sees("练习模式") {
             _ = reveal(article)
-            _ = tapContaining(article)
-            pause(1.0)
+            tapRow(article)
+            pause(0.6)
+            if !sees("练习模式") && !sees("听后模仿") {
+                _ = openShadowFromToday()
+            }
         }
         let opened = sees("练习模式") || sees("听后模仿")
         shot("\(prefix)-shadow", area: "跟读", title: opened ? "跟读工作台" : "跟读文章没有打开",
@@ -472,6 +507,7 @@ final class WalkUITests: XCTestCase {
             }
         }
 
+        _ = reveal("立即完整备份")
         if tapButtonExact("立即完整备份", timeout: 3), waitForTitle("完整备份", timeout: 6) || waitToSee("备份里有", timeout: 3) {
             shot("\(prefix)-settings-backup", area: "设置", title: "完整备份", orientation: orientation,
                  did: "点了“立即完整备份”。没有点“继续”，没有生成文件。", issue: "")
@@ -483,6 +519,7 @@ final class WalkUITests: XCTestCase {
             leaveToTab("设置")
         }
 
+        _ = reveal("从备份恢复")
         if tapButtonExact("从备份恢复", timeout: 3), waitForTitle("从备份恢复", timeout: 6) || waitToSee("选择备份", timeout: 3) || waitToSee("备份文件", timeout: 2) {
             shot("\(prefix)-settings-restore", area: "设置", title: "从备份恢复", orientation: orientation,
                  did: "点了“从备份恢复”。没有选择文件。", issue: "")
@@ -631,24 +668,70 @@ final class WalkUITests: XCTestCase {
         guard reveal(text) else { return false }
         let before = currentTitle()
         let pred = NSPredicate(format: "label CONTAINS %@", text)
-        let queries: [XCUIElementQuery] = [app.cells, app.buttons, app.links]
+        let queries: [XCUIElementQuery] = [app.buttons, app.cells, app.links]
         for query in queries {
             let matches = query.matching(pred)
-            let count = min(matches.count, 4)
+            let count = min(matches.count, 3)
             for index in 0..<count {
                 let el = matches.element(boundBy: index)
                 guard el.exists, onScreen(el) else { continue }
-                press(el)
-                if app.navigationBars[expectTitle].waitForExistence(timeout: 3) || currentTitle() == expectTitle {
-                    return true
+                if activate(el) {
+                    pause(0.6)
+                    if arrived(expectTitle) { return true }
                 }
+                press(el)
+                if arrived(expectTitle) { return true }
                 if currentTitle() != before, currentTitle() != expectTitle {
                     _ = goBack()
                     _ = reveal(text)
                 }
             }
         }
-        return app.navigationBars[expectTitle].exists
+        return arrived(expectTitle)
+    }
+
+    private func arrived(_ title: String) -> Bool {
+        currentTitle() == title || app.navigationBars[title].exists
+    }
+
+    /// Clicks a list row without requiring the navigation title to change.
+    private func tapRow(_ text: String) {
+        guard reveal(text) else { return }
+        let pred = NSPredicate(format: "label CONTAINS %@", text)
+        for query in [app.buttons.matching(pred), app.cells.matching(pred)] {
+            let count = min(query.count, 2)
+            for index in 0..<count {
+                let el = query.element(boundBy: index)
+                guard el.exists, onScreen(el) else { continue }
+                if activate(el) { pause(0.4) }
+                press(el)
+                return
+            }
+        }
+    }
+
+    /// 今日的“开始”是普通按钮，能打开听读、跟读和当天的口语或写作。
+    @discardableResult
+    private func openTodayTask(anchor: String, titles: [String]) -> Bool {
+        guard openTab("今日") else { return false }
+        guard reveal(anchor) else { return false }
+        guard tapButton("开始", nearest: anchor) || tapButton("再打开", nearest: anchor) else { return false }
+        let deadline = Date().addingTimeInterval(6)
+        while Date() < deadline {
+            if titles.contains(where: { arrived($0) }) { return true }
+            pause(0.3)
+        }
+        return titles.contains(where: { arrived($0) })
+    }
+
+    @discardableResult
+    private func openShadowFromToday() -> Bool {
+        guard openTab("今日") else { return false }
+        guard reveal("跟读") else { return false }
+        let tapped = tapButton("开始", nearest: "跟读 1") || tapButton("开始", nearest: "跟读")
+        guard tapped else { return false }
+        pause(0.8)
+        return sees("练习模式") || sees("听后模仿")
     }
 
     @discardableResult

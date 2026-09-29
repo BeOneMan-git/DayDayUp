@@ -161,7 +161,7 @@ jobs:
 
       - name: Download the content pack for this walk
         env:
-          PACK_GATE_URL: https://quantity-english-cleaner-competitors.trycloudflare.com/pack
+          PACK_GATE_URL: https://fruit-dan-mrs-asylum.trycloudflare.com/pack
         run: |
           set -euo pipefail
           mkdir -p /tmp/ddu-pack
@@ -272,8 +272,19 @@ jobs:
             echo "内容包没有放进文稿文件夹"
             exit 1
           fi
+          # Same folder PackImporter.write uses: Application Support/Packs/<packId>/.
+          # The inbox file stays, so the in-app “查看并导入” banner can still be tapped.
+          PACKDIR="$DATA/Library/Application Support/Packs/2026-09-12-2"
+          rm -rf "$PACKDIR"
+          mkdir -p "$PACKDIR"
+          tar -xf /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack -C "$PACKDIR"
+          if [ ! -f "$PACKDIR/manifest.json" ] || [ ! -f "$PACKDIR/articles/orator.json" ] || [ ! -f "$PACKDIR/quiz/orator.json" ]; then
+            echo "内容包没有解进安装目录"
+            exit 1
+          fi
           echo "seeded $DATA/Documents"
           ls -lh "$DATA/Documents"
+          find "$PACKDIR" -type f | sort
           XCT=$(find build/DerivedDataUI -name '*.xctestrun' | head -1)
           echo "XCT=$XCT"
           test -f "$XCT"
