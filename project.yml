@@ -174,8 +174,8 @@ schemes:
         - variable: SIM_SHOT_DIR
           value: /tmp/ddu-ui-shots
           isEnabled: true
-        - variable: PACK_PATH
-          value: /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack
+        - variable: PACK_MANIFEST
+          value: /tmp/ddu-pack/manifest.json
           isEnabled: true
     management:
       shared: true

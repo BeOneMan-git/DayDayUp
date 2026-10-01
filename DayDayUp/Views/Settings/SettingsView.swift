@@ -132,10 +132,10 @@ struct SettingsView: View {
             }
             NavigationLink {
                 ReaderSettingsView()
-                    .navigationTitle("阅读字号与标注")
             } label: {
                 SettingsLinkLabel(title: "阅读字号与标注", symbol: "textformat.size", value: fontSizeText)
             }
+            .accessibilityIdentifier("settings-type-size")
         } header: {
             Text("显示")
         } footer: {

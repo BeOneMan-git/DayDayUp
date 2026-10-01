@@ -3,6 +3,10 @@
 
 Reads manifest.jsonl (or DDU_SHOT lines in the xcodebuild log) and PNG
 screenshots. Writes report.html next to the screenshots.
+
+Exits 1 when a screen was not actually checked, when a record has an issue,
+or when there are no records. Article titles from the pack manifest are
+removed from the log and the report before anything is uploaded.
 """
 
 from __future__ import annotations
@@ -10,7 +14,10 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import sys
 from pathlib import Path
+
+BODY_NAME_PARTS = ("reader", "shadow", "baseline-quiz", "baseline-listening")
 
 
 def load_choice(path: Path) -> dict[str, str]:
@@ -53,12 +60,75 @@ def load_records(out: Path, log: Path | None) -> list[dict]:
     return records
 
 
+def manifest_titles(path: Path | None) -> list[str]:
+    if path is None or not path.is_file():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    articles = data.get("articles") or []
+    titles: list[str] = []
+    pack_title = data.get("title")
+    if isinstance(pack_title, str) and len(pack_title.strip()) >= 4:
+        titles.append(pack_title.strip())
+    for article in articles:
+        if not isinstance(article, dict):
+            continue
+        title = article.get("title")
+        if isinstance(title, str) and len(title.strip()) >= 4:
+            titles.append(title.strip())
+    titles.sort(key=len, reverse=True)
+    return titles
+
+
+def redact_text(text: str, titles: list[str]) -> str:
+    for title in titles:
+        text = text.replace(title, "[文章标题已省略]")
+    return text
+
+
+def redact_file(path: Path, titles: list[str]) -> None:
+    if not titles or not path.is_file():
+        return
+    original = path.read_text(encoding="utf-8", errors="replace")
+    updated = redact_text(original, titles)
+    if updated != original:
+        path.write_text(updated, encoding="utf-8")
+
+
+def redact_outputs(out: Path, log: Path | None, titles: list[str]) -> None:
+    if not titles:
+        return
+    if log is not None:
+        redact_file(log, titles)
+    for path in out.rglob("*"):
+        if path.is_file() and path.suffix.lower() in {".html", ".json", ".jsonl", ".txt", ".log"}:
+            redact_file(path, titles)
+
+
+def drop_body_pngs(out: Path) -> None:
+    for path in out.rglob("*.png"):
+        name = path.name.lower()
+        if any(part in name for part in BODY_NAME_PARTS):
+            path.unlink()
+
+
+def hides_body(record: dict) -> bool:
+    if record.get("body") is True:
+        return True
+    name = str(record.get("id") or "").lower()
+    return any(part in name for part in BODY_NAME_PARTS)
+
+
 def find_png(out: Path, record: dict) -> Path | None:
+    if hides_body(record):
+        return None
     file_name = record.get("file") or f"{record.get('id', '')}.png"
     direct = out / file_name
     if direct.is_file():
         return direct
-    stem = Path(file_name).stem
+    stem = Path(str(file_name)).stem
     matches = sorted(out.rglob(f"{stem}*.png"))
     return matches[0] if matches else None
 
@@ -96,19 +166,17 @@ def process_section() -> str:
     return """
     <h2>测试过程</h2>
     <ol>
-      <li>在 macos-26 上用 XcodeGen 生成工程，再用和逻辑测试相同的脚本选择 iPad 模拟器。</li>
-      <li>用 scheme <code>UIWalk</code> 把 DayDayUp 装进这台模拟器并启动。这个 scheme 不参与未签名 IPA。</li>
-      <li>界面测试在 Mac 上点模拟器里的 App：今日、基线、书架、跟读、雅思、词汇、进度、设置，以及从这些页面点得进去的子页。</li>
-      <li>仓库里没有 <code>.ecopack</code> 内容包。没有文章的页面就停在空状态，不编造杂志内容。</li>
-      <li>没有点会开始录音的按钮（“看题并开始”“直接开始说”“开始模拟”“开始准备”）。独立短文只打开编辑区，不保存。</li>
-      <li>每一屏截一张全屏图。打不开的，截当时挡住的那一屏，并在下面写原因。</li>
+      <li>只有手动运行 UI Walk 才会点界面。内容包从仓库 secret 下载；仓库里不保存地址，也不提交内容包。</li>
+      <li>内容包只放进模拟器 App 的文稿文件夹。安装目录不会预先解包。走查要点开导入提示里的预览，确认后再看文章是否出现在书架。</li>
+      <li>文章标题在运行时从内容包清单读取。报告和日志在上传前去掉这些标题。</li>
+      <li>听读正文、中文翻译、理解题、跟读句子和基线短听读会核对是否打开，但不保存截图，也不上传 xcresult 附件。</li>
+      <li>没有点会开始录音的按钮。必开的一屏如果没打开，这一次走查记为失败。</li>
     </ol>
     """
 
 
-def uncovered_section(missing: list[str]) -> str:
-    items = "".join(f"<li>{esc(item)}</li>" for item in missing)
-    return f"""
+def uncovered_section() -> str:
+    return """
     <h2>没覆盖到的部分</h2>
     <p>下面这些这次没有做，也不能用这次模拟器结果代替。</p>
     <ul>
@@ -116,7 +184,7 @@ def uncovered_section(missing: list[str]) -> str:
       <li>签名。未签名 IPA、AltServer、免费 Apple ID 每周重装，这次都没有做。</li>
       <li>麦克风。模拟器没有你的麦克风。跟读录音、口语录音、基线“看题并开始”都没有按下去。</li>
       <li>Apple Pencil。模拟器里没有 Pencil 的压感和手写。</li>
-      {items}
+      <li>文章正文和中文译文的截图。这些屏如果打开了，只在记录里写核对结果，图不进产物。</li>
     </ul>
     """
 
@@ -125,30 +193,38 @@ def screen_section(records: list[dict], out: Path) -> str:
     if not records:
         return """
         <h2>逐屏结果</h2>
-        <p>这次没有截到屏幕。请看同一次运行里的 ui-walk.log。</p>
+        <p>这次没有逐屏记录。走查不能算通过。</p>
         """
-    blocks = ["<h2>逐屏结果</h2>", "<p>下面每一节都是这次实际打开（或尝试打开）的一屏。说明来自这次点击和屏幕上的文字。</p>"]
+    blocks = ["<h2>逐屏结果</h2>", "<p>下面每一节对应一次实际核对。有问题的会写原因；没打开的不算通过。</p>"]
     for record in records:
-        image = find_png(out, record)
         title = record.get("title") or record.get("id")
         area = record.get("area") or ""
         did = record.get("did") or ""
         saw = record.get("saw") or ""
-        issue = record.get("issue") or ""
-        figure = ""
-        if image is not None:
-            relative = image.relative_to(out).as_posix() if image.is_relative_to(out) else image.name
-            figure = f'<img src="{esc(relative)}" alt="{esc(title)}">'
+        issue = str(record.get("issue") or "").strip()
+        checked = record.get("checked") is True
+        if hides_body(record):
+            figure = "<p>这一屏已核对，但不保存截图，避免把文章正文或中文译文放进公开产物。</p>"
         else:
-            figure = "<p>这张图没有写进产物目录。</p>"
-        issue_html = f"<p><strong>问题：</strong>{esc(issue)}</p>" if issue else "<p><strong>问题：</strong>这一屏没有记到额外问题。</p>"
+            image = find_png(out, record)
+            if image is not None:
+                relative = image.relative_to(out).as_posix() if image.is_relative_to(out) else image.name
+                figure = f'<img src="{esc(relative)}" alt="{esc(title)}">'
+            else:
+                figure = "<p>这张图没有写进产物目录。</p>"
+        if issue:
+            issue_html = f"<p><strong>问题：</strong>{esc(issue)}</p>"
+        elif checked:
+            issue_html = "<p><strong>结果：</strong>这一屏已经核对过。</p>"
+        else:
+            issue_html = "<p><strong>问题：</strong>这一屏没有实际核对。</p>"
         blocks.append(
             f"""
             <section>
               <h3>{esc(area)} · {esc(title)}</h3>
               {figure}
               <p><strong>做了什么：</strong>{esc(did)}</p>
-              <p><strong>看到什么：</strong>{esc(saw) if saw else "（没有读到界面文字）"}</p>
+              <p><strong>看到什么：</strong>{esc(saw) if saw else "（界面文字不写入这篇报告）"}</p>
               {issue_html}
             </section>
             """
@@ -156,29 +232,40 @@ def screen_section(records: list[dict], out: Path) -> str:
     return "\n".join(blocks)
 
 
+def failure_reasons(records: list[dict]) -> list[str]:
+    if not records:
+        return ["没有逐屏记录，不能把这次走查看成通过。"]
+    reasons: list[str] = []
+    for record in records:
+        ident = str(record.get("id") or record.get("title") or "未命名")
+        if record.get("checked") is not True:
+            reasons.append(f"{ident} 没有实际核对。")
+        issue = str(record.get("issue") or "").strip()
+        if issue:
+            reasons.append(f"{ident}：{issue}")
+    return reasons
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--choice", type=Path, required=True)
     parser.add_argument("--log", type=Path, default=None)
+    parser.add_argument("--redact-manifest", type=Path, default=None)
     args = parser.parse_args()
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
+    titles = manifest_titles(args.redact_manifest)
+    drop_body_pngs(out)
+    redact_outputs(out, args.log, titles)
     choice = load_choice(args.choice)
     records = load_records(out, args.log)
-    missing = [
-        "听读器（书架里的文章正文、点词、播放）。书架是空的，没有文章可点。",
-        "朗读正文，以及工具栏里的“显示中文翻译 / 隐藏中文翻译”。这两项都在听读器里。",
-        "跟读工作台（听后模仿、影子跟读、独立朗读、脱稿复述）。没有文章，只能看到空的选文页。",
-        "基线的短听读理解题。没有带理解题的内容包。",
-        "词汇自测的 24 个词。词库来自内容包，这次是空的。",
-    ]
     body = "\n".join(
         [
             environment_section(choice),
             process_section(),
             screen_section(records, out),
-            uncovered_section(missing),
+            uncovered_section(),
         ]
     )
     document = f"""<!DOCTYPE html>
@@ -197,13 +284,20 @@ def main() -> None:
 </head>
 <body>
   <h1>DayDayUp 模拟器走查</h1>
-  <p>给 Song Johnson。图是这次 iPad 模拟器里打开 DayDayUp 后截的。没有内容包的功能只写实际停住的那一屏。</p>
+  <p>给 Song Johnson。图是这次 iPad 模拟器里打开 DayDayUp 后截的。带文章正文或中文译文的屏幕只核对、不截图。</p>
   {body}
 </body>
 </html>
 """
-    (out / "report.html").write_text(document, encoding="utf-8")
-    print(f"wrote {out / 'report.html'} screens={len(records)}")
+    report = out / "report.html"
+    report.write_text(redact_text(document, titles), encoding="utf-8")
+    reasons = failure_reasons(records)
+    if reasons:
+        print("ui-walk 未通过：", file=sys.stderr)
+        for reason in reasons:
+            print(reason, file=sys.stderr)
+        sys.exit(1)
+    print(f"wrote {report} screens={len(records)}")
 
 
 if __name__ == "__main__":

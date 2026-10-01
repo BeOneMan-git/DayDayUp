@@ -130,8 +130,9 @@ V1.0 改了学习记录和内容包的格式。升级本身不删数据，但先
 
 - `DayDayUp/`：App 源代码（SwiftUI，iPadOS 26 起）。
 - `project.yml`：XcodeGen 配置。GitHub 的 macOS 机器用它生成 Xcode 工程，所以不需要自己的 Mac。
-- `.github/workflows/build.yml`：推送到 dev 分支只编译和跑逻辑测试；推送到 main 分支才产出未签名的 DayDayUp.ipa，发布到 Releases。安装时用你的 Apple ID 签名。
-- `.github/workflows/test.yml`：在同一类 macOS 机器上，用 iPad 模拟器再跑一遍逻辑测试，并为模拟器编译 App。不产出 ipa，失败也不会挡住上面的安装包。怎么开、能测什么，见 [TESTING.md](TESTING.md)。
-- `LogicTests/`：纯逻辑的测试（FSRS 排期、队列、计划、统计、答案核对、内容包比对等），在 CI 里运行。
+- `.github/workflows/build.yml`：推送到 dev 或手动运行时编译并跑逻辑测试；推送到 main 才产出未签名的 DayDayUp.ipa，发布到 Releases。安装时用你的 Apple ID 签名。这个工作流不在 pull request 上跑。它自己的逻辑测试如果失败，后面的打包不会执行。Test 工作流失败不会挡住这条发布。
+- `.github/workflows/test.yml`：推送、pull request 或手动运行。先跑 `swift test`（模拟器没选上也会跑），再在 iPad 模拟器里编译并跑逻辑测试。不产出 ipa，也不点界面。怎么开、能测什么，见 [TESTING.md](TESTING.md)。
+- `.github/workflows/ui-walk.yml`：只有手动运行。需要仓库 secret `DDU_PACK_URL`。没有这个 secret，或内容包下载失败时，日志写明跳过，任务算通过，不会去点界面。仓库里不提交内容包，也不写下载地址。
+- `LogicTests/`：纯逻辑的测试（FSRS 排期、队列、计划、统计、答案核对、内容包比对等），在 CI 里运行。逻辑测试的宿主按 iOS 17.0 编译，App 本身仍是 iPadOS 26。
 - `docs/GUIDE.md`：使用说明。
 - 仓库里没有任何杂志内容。内容包只放在你的电脑和 iPad 上，只供个人学习。雅思题目和参考答案是原创的。

@@ -30,6 +30,7 @@ struct StudyProgressPage: View {
             .frame(maxWidth: 760, alignment: .leading)
             .padding(24)
             .frame(maxWidth: .infinity)
+            .accessibilityIdentifier("progress-window-\(window)")
         }
         .navigationTitle("进度")
         .onDisappear { playback.stop() }

@@ -1,6 +1,8 @@
-# Logic tests, an iPad Simulator build, and a UI walk of the DayDayUp app.
+# Logic tests and an iPad Simulator build of DayDayUp.
+# The UI walk is a separate manual workflow (ui-walk.yml). It does not run on
+# push or pull_request, and it does not use a tunnel URL or an OIDC token.
 # Separate from Build IPA so a red test does not block the unsigned DayDayUp.ipa
-# published from main. The UI walk uses scheme UIWalk and does not change that IPA.
+# published from main.
 name: Test
 
 on:
@@ -23,6 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Pin Xcode and XcodeGen
+        run: bash .github/scripts/pin-tools.sh
+
       - name: Show toolchain and simulators
         run: |
           set -o pipefail
@@ -39,8 +44,19 @@ jobs:
             xcrun simctl list devicetypes
           } | tee runner-simulators.txt
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Logic tests (swift test)
+        id: swifttest
+        run: |
+          set -euo pipefail
+          mkdir -p LogicTests/Sources/DDULogic
+          cp DayDayUp/Logic/*.swift DayDayUp/Models/PackModels.swift DayDayUp/Models/PracticeModels.swift LogicTests/Sources/DDULogic/
+          set +e
+          set +o pipefail
+          swift test --package-path LogicTests 2>&1 | tee logic-tests.log | grep --line-buffered -E "error:|failed|passed|Executed"
+          status=${PIPESTATUS[0]}
+          set -e
+          set -o pipefail
+          exit "$status"
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -51,6 +67,7 @@ jobs:
 
       - name: Record whether DayDayUp can use that simulator
         id: dest
+        if: steps.select.outcome == 'success'
         run: |
           set -o pipefail
           xcodebuild -project DayDayUp.xcodeproj -scheme LogicTests -showdestinations > destinations-logic.txt 2>&1
@@ -74,15 +91,6 @@ jobs:
             echo "DayDayUp 的部署目标是 iPadOS 26，选中的模拟器装不上这个 App。改为只按 iOS Simulator SDK 编译。" | tee -a simulator-choice.txt
           fi
 
-      - name: Logic tests (swift test)
-        id: swifttest
-        if: steps.select.outcome == 'success'
-        run: |
-          set -o pipefail
-          mkdir -p LogicTests/Sources/DDULogic
-          cp DayDayUp/Logic/*.swift DayDayUp/Models/PackModels.swift DayDayUp/Models/PracticeModels.swift LogicTests/Sources/DDULogic/
-          swift test --package-path LogicTests 2>&1 | tee logic-tests.log | grep -E "error:|failed|passed|Executed" 
-
       - name: Build DayDayUp for iPad simulator
         id: appbuild
         if: steps.select.outcome == 'success' && steps.dest.outcome == 'success'
@@ -98,7 +106,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee app-simulator-build.log | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)"
+            build 2>&1 | tee app-simulator-build.log | grep --line-buffered -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" app-simulator-build.log
 
       - name: Run logic tests on iPad simulator
@@ -120,7 +128,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            2>&1 | tee simulator-tests.log | grep -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|Executed|failed"
+            2>&1 | tee simulator-tests.log | grep --line-buffered -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|Executed|failed" || true
           grep -q "TEST SUCCEEDED" simulator-tests.log
 
       - name: Show test failures
@@ -139,6 +147,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-logs
+          retention-days: 3
           if-no-files-found: ignore
           path: |
             runner-simulators.txt
@@ -149,181 +158,3 @@ jobs:
             simulator-tests.log
             app-simulator-build.log
             build/LogicTests.xcresult
-
-  ui-walk:
-    runs-on: macos-26
-    timeout-minutes: 120
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download the content pack for this walk
-        env:
-          PACK_GATE_URL: https://fruit-dan-mrs-asylum.trycloudflare.com/pack
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/ddu-pack
-          TOKEN=$(curl -fsSL -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=daydayup-pack-import" \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')
-          curl -fL --retry 4 --retry-delay 3 \
-            -H "Authorization: Bearer ${TOKEN}" \
-            -o /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack \
-            "$PACK_GATE_URL"
-          python3 - <<'PY'
-          import tarfile
-          path = "/tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack"
-          archive = tarfile.open(path)
-          names = archive.getnames()
-          assert "manifest.json" in names
-          assert any(name.endswith(".m4a") for name in names)
-          print("pack entries", len(names))
-          PY
-          ls -lh /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack
-
-      - name: Show toolchain and simulators
-        run: |
-          set -o pipefail
-          {
-            echo "===== xcodebuild -version ====="
-            xcodebuild -version
-            echo "===== xcodebuild -showsdks ====="
-            xcodebuild -showsdks
-            echo "===== xcrun simctl list runtimes ====="
-            xcrun simctl list runtimes
-            echo "===== xcrun simctl list devices available ====="
-            xcrun simctl list devices available
-            echo "===== xcrun simctl list devicetypes ====="
-            xcrun simctl list devicetypes
-          } | tee runner-simulators.txt
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Choose iPad simulator
-        id: select
-        run: python3 .github/scripts/select-ipad-simulator.py
-
-      - name: Record whether DayDayUp can use that simulator
-        id: dest
-        run: |
-          set -o pipefail
-          xcodebuild -project DayDayUp.xcodeproj -scheme UIWalk -showdestinations > destinations-ui.txt 2>&1
-          echo "===== UIWalk destinations =====" | tee -a runner-simulators.txt
-          cat destinations-ui.txt | tee -a runner-simulators.txt
-          if ! grep -F "$SIM_UDID" destinations-ui.txt | grep -v "error:" | grep -q .; then
-            echo "UIWalk 不能用选中的模拟器 $SIM_NAME ($SIM_UDID)" | tee -a simulator-choice.txt
-            exit 1
-          fi
-
-      - name: Walk DayDayUp on the iPad simulator
-        id: walk
-        if: steps.select.outcome == 'success' && steps.dest.outcome == 'success'
-        run: |
-          set +e
-          set -o pipefail
-          rm -rf /tmp/ddu-ui-shots build/UIWalk.xcresult
-          mkdir -p /tmp/ddu-ui-shots
-          export TEST_RUNNER_SIM_SHOT_DIR=/tmp/ddu-ui-shots
-          export TEST_RUNNER_SIM_NAME="$SIM_NAME"
-          export TEST_RUNNER_SIM_OS="$SIM_OS"
-          export TEST_RUNNER_SIM_RUNTIME_NAME="$SIM_RUNTIME_NAME"
-          export TEST_RUNNER_PACK_PATH=/tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack
-          echo "UI destination: $SIM_DESTINATION ($SIM_NAME, $SIM_RUNTIME_NAME)"
-          xcodebuild build-for-testing \
-            -project DayDayUp.xcodeproj \
-            -scheme UIWalk \
-            -configuration Debug \
-            -destination "$SIM_DESTINATION" \
-            -derivedDataPath build/DerivedDataUI \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            2>&1 | tee ui-walk-build.log | grep -E "error:|warning:|TEST (SUCCEEDED|FAILED)|BUILD"
-          build_status=${PIPESTATUS[0]}
-          if [ "$build_status" -ne 0 ]; then
-            exit "$build_status"
-          fi
-          APP=$(find build/DerivedDataUI/Build/Products -type d -name 'DayDayUp.app' ! -path '*UITests*' | head -1)
-          echo "APP=$APP"
-          if [ ! -d "$APP" ]; then
-            echo "没有找到 DayDayUp.app"
-            exit 1
-          fi
-          xcrun simctl boot "$SIM_UDID" || true
-          xcrun simctl bootstatus "$SIM_UDID" -b
-          xcrun simctl install "$SIM_UDID" "$APP"
-          install_status=$?
-          if [ "$install_status" -ne 0 ]; then
-            exit "$install_status"
-          fi
-          xcrun simctl launch "$SIM_UDID" com.daydayup.app || true
-          sleep 2
-          xcrun simctl terminate "$SIM_UDID" com.daydayup.app || true
-          DATA=$(xcrun simctl get_app_container "$SIM_UDID" com.daydayup.app data)
-          mkdir -p "$DATA/Documents"
-          cp /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack "$DATA/Documents/DayDayUp-2026-09-12-2.ecopack"
-          if [ ! -f "$DATA/Documents/DayDayUp-2026-09-12-2.ecopack" ]; then
-            echo "内容包没有放进文稿文件夹"
-            exit 1
-          fi
-          # Same folder PackImporter.write uses: Application Support/Packs/<packId>/.
-          # The inbox file stays, so the in-app “查看并导入” banner can still be tapped.
-          PACKDIR="$DATA/Library/Application Support/Packs/2026-09-12-2"
-          rm -rf "$PACKDIR"
-          mkdir -p "$PACKDIR"
-          tar -xf /tmp/ddu-pack/DayDayUp-2026-09-12-2.ecopack -C "$PACKDIR"
-          if [ ! -f "$PACKDIR/manifest.json" ] || [ ! -f "$PACKDIR/articles/orator.json" ] || [ ! -f "$PACKDIR/quiz/orator.json" ]; then
-            echo "内容包没有解进安装目录"
-            exit 1
-          fi
-          echo "seeded $DATA/Documents"
-          ls -lh "$DATA/Documents"
-          find "$PACKDIR" -type f | sort
-          XCT=$(find build/DerivedDataUI -name '*.xctestrun' | head -1)
-          echo "XCT=$XCT"
-          test -f "$XCT"
-          xcodebuild test-without-building \
-            -xctestrun "$XCT" \
-            -destination "$SIM_DESTINATION" \
-            -resultBundlePath build/UIWalk.xcresult \
-            -only-testing:DayDayUpUITests/WalkUITests \
-            -parallel-testing-enabled NO \
-            2>&1 | tee ui-walk.log | grep -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|DDU_SHOT|DDU_PACK|DDU_HIER|Executed|failed"
-          status=${PIPESTATUS[0]}
-          exit "$status"
-
-      - name: Collect screenshots and report
-        if: always()
-        run: |
-          set +e
-          OUT="$GITHUB_WORKSPACE/ui-walk-out"
-          rm -rf "$OUT"
-          mkdir -p "$OUT"
-          if [ -d /tmp/ddu-ui-shots ]; then
-            cp -R /tmp/ddu-ui-shots/. "$OUT/" || true
-          fi
-          if [ -d build/UIWalk.xcresult ]; then
-            xcrun xcresulttool export attachments --path build/UIWalk.xcresult --output-path "$OUT/xcattachments" || true
-            if [ -d "$OUT/xcattachments" ]; then
-              find "$OUT/xcattachments" -name '*.png' -exec cp {} "$OUT/" \;
-            fi
-          fi
-          cp simulator-choice.txt runner-simulators.txt destinations-ui.txt ui-walk.log ui-walk-build.log "$OUT/" 2>/dev/null || true
-          python3 .github/scripts/ui-walk-report.py --out "$OUT" --choice simulator-choice.txt --log ui-walk.log
-          echo "===== ui-walk-out ====="
-          find "$OUT" -maxdepth 2 -type f | sort
-          ls -lh "$OUT"/*.png 2>/dev/null | head -80 || true
-
-      - name: Upload UI walk
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-walk
-          if-no-files-found: ignore
-          path: ui-walk-out
