@@ -578,7 +578,8 @@ private struct ReaderDrawer: View {
     }
 }
 
-/// Reading options: the Aa button in the reader, and 设置 → 显示 → 阅读字号与标注.
+/// Reading options opened from the reader’s Aa button and from 设置 → 显示 → 阅读字号与标注.
+/// The page title matches that settings row. The reader button can still say “阅读设置”.
 struct ReaderSettingsView: View {
     @Environment(UserStore.self) private var user
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -593,7 +594,8 @@ struct ReaderSettingsView: View {
             listeningSection
             keysSection
         }
-        .navigationTitle("阅读设置")
+        .navigationTitle("阅读字号与标注")
+        .accessibilityIdentifier("reader-settings-screen")
     }
 
     // MARK: Sections

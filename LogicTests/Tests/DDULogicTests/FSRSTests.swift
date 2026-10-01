@@ -1,5 +1,7 @@
 import XCTest
+#if SWIFT_PACKAGE
 @testable import DDULogic
+#endif
 
 /// The Swift port must give the same schedule as py-fsrs 6.3.2 (fixtures made by tools/gen_fsrs_fixtures.py).
 final class FSRSTests: XCTestCase {
@@ -39,8 +41,7 @@ final class FSRSTests: XCTestCase {
     }
 
     func load() throws -> Fixture {
-        let url = try XCTUnwrap(Bundle.module.url(forResource: "fsrs_cases", withExtension: "json",
-                                                  subdirectory: "Fixtures"))
+        let url = try TestFixtures.url(name: "fsrs_cases", ext: "json")
         return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
     }
 

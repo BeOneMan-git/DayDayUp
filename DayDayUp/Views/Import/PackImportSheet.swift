@@ -21,6 +21,7 @@ struct PackImportSheet: View {
             }
             .navigationTitle("导入内容包")
             .navigationBarTitleDisplayMode(.inline)
+            .accessibilityIdentifier("pack-import-sheet")
             .toolbar { toolbarContent }
         }
         .interactiveDismissDisabled(model.phase == .committing)

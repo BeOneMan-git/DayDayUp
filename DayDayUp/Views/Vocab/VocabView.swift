@@ -56,6 +56,7 @@ struct VocabView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityIdentifier("vocab-page-\(page.wrappedValue.rawValue)")
         }
         .navigationTitle("词汇")
         .navigationBarTitleDisplayMode(.inline)

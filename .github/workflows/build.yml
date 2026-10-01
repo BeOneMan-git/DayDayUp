@@ -1,6 +1,7 @@
 # Builds DayDayUp on GitHub's macOS runner.
 # - dev branch: compile check only (no ipa, no release).
 # - main branch: unsigned DayDayUp.ipa, published as a release. AltServer signs it with your own Apple ID when it installs the app.
+# iPad Simulator runs live in test.yml and do not gate this release.
 name: Build IPA
 
 on:

@@ -22,6 +22,7 @@ struct InboxImportBanner: View {
             } label: {
                 bannerLabel(count: files.isEmpty ? shownCount : files.count)
             }
+            .accessibilityIdentifier("inbox-import-banner")
             .accessibilityHint("打开导入预览，先看再决定")
             .sheet(item: $request, onDismiss: { rescan() }) { r in
                 PackImportSheet(urls: r.urls) { _ in

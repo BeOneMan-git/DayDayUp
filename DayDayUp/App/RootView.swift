@@ -42,7 +42,10 @@ struct RootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
-        .simultaneousGesture(TapGesture().onEnded { ActivityClock.shared.touch() })
+        .background {
+            ActivityTouchRecorder()
+                .allowsHitTesting(false)
+        }
         .onChange(of: router.tab, initial: true) { _, tab in
             ActivityClock.shared.currentCategory = RootView.category(for: tab)
         }
@@ -72,5 +75,58 @@ struct RootView: View {
     /// Spoken by VoiceOver when it is on; nothing happens otherwise.
     static func announce(_ text: String) {
         UIAccessibility.post(notification: .announcement, argument: text)
+    }
+}
+
+/// Counts a tap toward practice time without taking the click away from lists or buttons.
+/// A SwiftUI tap gesture on the tab view swallowed those clicks. This recognizer sits on the window,
+/// does not cancel or delay the touch, and is the same in Debug and Release.
+private struct ActivityTouchRecorder: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        context.coordinator.attach(from: view)
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.attach(from: uiView)
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        private static let gestureName = "daydayup.activity"
+
+        func attach(from view: UIView) {
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view else { return }
+                self.install(on: view)
+            }
+        }
+
+        private func install(on view: UIView) {
+            guard let window = view.window else { return }
+            if window.gestureRecognizers?.contains(where: { $0.name == Self.gestureName }) == true { return }
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+            tap.name = Self.gestureName
+            tap.cancelsTouchesInView = false
+            tap.delaysTouchesBegan = false
+            tap.delaysTouchesEnded = false
+            tap.delegate = self
+            window.addGestureRecognizer(tap)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
+
+        @objc func tapped() {
+            Task { @MainActor in
+                ActivityClock.shared.touch()
+            }
+        }
     }
 }

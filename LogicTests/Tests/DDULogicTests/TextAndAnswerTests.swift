@@ -1,5 +1,7 @@
 import XCTest
+#if SWIFT_PACKAGE
 @testable import DDULogic
+#endif
 
 final class SentenceTextTests: XCTestCase {
     struct HashSample: Decodable {
@@ -9,7 +11,7 @@ final class SentenceTextTests: XCTestCase {
     }
 
     func testHashMatchesPipeline() throws {
-        let url = try XCTUnwrap(Bundle.module.url(forResource: "text_hash", withExtension: "json", subdirectory: "Fixtures"))
+        let url = try TestFixtures.url(name: "text_hash", ext: "json")
         let samples = try JSONDecoder().decode([HashSample].self, from: Data(contentsOf: url))
         for s in samples {
             XCTAssertEqual(SentenceText.normalize(s.text), s.norm)

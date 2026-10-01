@@ -1,0 +1,160 @@
+# Logic tests and an iPad Simulator build of DayDayUp.
+# The UI walk is a separate manual workflow (ui-walk.yml). It does not run on
+# push or pull_request, and it does not use a tunnel URL or an OIDC token.
+# Separate from Build IPA so a red test does not block the unsigned DayDayUp.ipa
+# published from main.
+name: Test
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pin Xcode and XcodeGen
+        run: bash .github/scripts/pin-tools.sh
+
+      - name: Show toolchain and simulators
+        run: |
+          set -o pipefail
+          {
+            echo "===== xcodebuild -version ====="
+            xcodebuild -version
+            echo "===== xcodebuild -showsdks ====="
+            xcodebuild -showsdks
+            echo "===== xcrun simctl list runtimes ====="
+            xcrun simctl list runtimes
+            echo "===== xcrun simctl list devices available ====="
+            xcrun simctl list devices available
+            echo "===== xcrun simctl list devicetypes ====="
+            xcrun simctl list devicetypes
+          } | tee runner-simulators.txt
+
+      - name: Logic tests (swift test)
+        id: swifttest
+        run: |
+          set -euo pipefail
+          mkdir -p LogicTests/Sources/DDULogic
+          cp DayDayUp/Logic/*.swift DayDayUp/Models/PackModels.swift DayDayUp/Models/PracticeModels.swift LogicTests/Sources/DDULogic/
+          set +e
+          set +o pipefail
+          swift test --package-path LogicTests 2>&1 | tee logic-tests.log | grep --line-buffered -E "error:|failed|passed|Executed"
+          status=${PIPESTATUS[0]}
+          set -e
+          set -o pipefail
+          exit "$status"
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Choose iPad simulator
+        id: select
+        run: python3 .github/scripts/select-ipad-simulator.py
+
+      - name: Record whether DayDayUp can use that simulator
+        id: dest
+        if: steps.select.outcome == 'success'
+        run: |
+          set -o pipefail
+          xcodebuild -project DayDayUp.xcodeproj -scheme LogicTests -showdestinations > destinations-logic.txt 2>&1
+          xcodebuild -project DayDayUp.xcodeproj -scheme DayDayUp -showdestinations > destinations-app.txt 2>&1
+          echo "===== LogicTests destinations =====" | tee -a runner-simulators.txt
+          cat destinations-logic.txt | tee -a runner-simulators.txt
+          echo "===== DayDayUp destinations =====" | tee -a runner-simulators.txt
+          cat destinations-app.txt | tee -a runner-simulators.txt
+          if ! grep -F "$SIM_UDID" destinations-logic.txt | grep -v "error:" | grep -q .; then
+            echo "LogicTests 不能用选中的模拟器 $SIM_NAME ($SIM_UDID)" | tee -a simulator-choice.txt
+            exit 1
+          fi
+          if grep -F "$SIM_UDID" destinations-app.txt | grep -v "error:" | grep -q .; then
+            echo "APP_DESTINATION=$SIM_DESTINATION" >> "$GITHUB_ENV"
+            echo "APP_BUILDS_FOR_DEVICE=true" >> "$GITHUB_ENV"
+            echo "app_builds_for_device=true" >> simulator-choice.txt
+          else
+            echo "APP_DESTINATION=generic/platform=iOS Simulator" >> "$GITHUB_ENV"
+            echo "APP_BUILDS_FOR_DEVICE=false" >> "$GITHUB_ENV"
+            echo "app_builds_for_device=false" >> simulator-choice.txt
+            echo "DayDayUp 的部署目标是 iPadOS 26，选中的模拟器装不上这个 App。改为只按 iOS Simulator SDK 编译。" | tee -a simulator-choice.txt
+          fi
+
+      - name: Build DayDayUp for iPad simulator
+        id: appbuild
+        if: steps.select.outcome == 'success' && steps.dest.outcome == 'success'
+        run: |
+          set -o pipefail
+          echo "App destination: $APP_DESTINATION"
+          xcodebuild \
+            -project DayDayUp.xcodeproj \
+            -scheme DayDayUp \
+            -configuration Debug \
+            -destination "$APP_DESTINATION" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee app-simulator-build.log | grep --line-buffered -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" app-simulator-build.log
+
+      - name: Run logic tests on iPad simulator
+        id: simtest
+        if: steps.select.outcome == 'success' && steps.dest.outcome == 'success'
+        run: |
+          set -o pipefail
+          echo "Test destination: $SIM_DESTINATION ($SIM_NAME, $SIM_RUNTIME_NAME)"
+          mkdir -p build
+          rm -rf build/LogicTests.xcresult
+          xcodebuild test \
+            -project DayDayUp.xcodeproj \
+            -scheme LogicTests \
+            -configuration Debug \
+            -destination "$SIM_DESTINATION" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/LogicTests.xcresult \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee simulator-tests.log | grep --line-buffered -E "error:|Test Case|TEST (SUCCEEDED|FAILED)|Executed|failed" || true
+          grep -q "TEST SUCCEEDED" simulator-tests.log
+
+      - name: Show test failures
+        if: failure()
+        run: |
+          grep -E "error:|failed" logic-tests.log simulator-tests.log app-simulator-build.log 2>/dev/null | awk '!seen[$0]++' | head -20 | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
+          echo "----- logic-tests.log -----"
+          tail -n 60 logic-tests.log 2>/dev/null || true
+          echo "----- simulator-tests.log -----"
+          tail -n 80 simulator-tests.log 2>/dev/null || true
+          echo "----- app-simulator-build.log -----"
+          tail -n 40 app-simulator-build.log 2>/dev/null || true
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          retention-days: 3
+          if-no-files-found: ignore
+          path: |
+            runner-simulators.txt
+            simulator-choice.txt
+            destinations-logic.txt
+            destinations-app.txt
+            logic-tests.log
+            simulator-tests.log
+            app-simulator-build.log
+            build/LogicTests.xcresult
